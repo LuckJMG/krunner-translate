@@ -1,4 +1,4 @@
-// Finds translations for a parsed query in dictionary.sqlite3 (tables `meaning` and `lemma`, see tools/build_dictionary.py).
+// Finds translations for a parsed query in dictionary.sqlite3 (tables `meaning`, `lemma` and `language`, see tools/build_dictionary.py).
 use crate::parser::Query;
 use rusqlite::Connection;
 use std::collections::BTreeSet;
@@ -33,7 +33,7 @@ pub fn lookup(db: &Connection, query: &Query) -> rusqlite::Result<Outcome> {
             return Ok(Outcome::MissingLanguage(code.clone()));
         }
     }
-    // Directions in the order of their sections. Without `from:`, Spanish to English comes first (English is the main language).
+    // Without `from:`, Spanish to English comes before English to Spanish. This only decides ties in the final order.
     let directions: Vec<(String, String)> = match (&query.from, &query.to) {
         (Some(from), Some(to)) => vec![(from.clone(), to.clone())],
         (Some(from), None) => vec![(from.clone(), (if from == MAIN { SECOND } else { MAIN }).to_string())],
@@ -45,25 +45,17 @@ pub fn lookup(db: &Connection, query: &Query) -> rusqlite::Result<Outcome> {
     for (from, to) in &directions {
         sections.extend(direction_sections(db, from, to, &word)?);
     }
+    // The best score first, over all directions. The sort is stable, so ties keep the order above.
+    sections.sort_by(|a, b| b.rows[0].score.total_cmp(&a.rows[0].score));
     Ok(if sections.is_empty() { Outcome::NotFound } else { Outcome::Sections(sections) })
 }
 
-/// The languages in the `direction` column (`en-es` gives `en` and `es`).
 fn installed_languages(db: &Connection) -> rusqlite::Result<BTreeSet<String>> {
-    let mut statement = db.prepare("select distinct direction from meaning")?;
-    let directions = statement.query_map([], |row| row.get::<_, String>(0))?;
-    let mut languages = BTreeSet::new();
-    for direction in directions {
-        let direction = direction?;
-        if let Some((from, to)) = direction.split_once('-') {
-            languages.insert(from.to_string());
-            languages.insert(to.to_string());
-        }
-    }
-    Ok(languages)
+    let mut statement = db.prepare("select code from language")?;
+    statement.query_map([], |row| row.get::<_, String>(0))?.collect()
 }
 
-/// The sections of one direction, the best score first. The word itself comes before its base forms if scores are equal.
+/// The sections of one direction: one for the word and one for each base form. The word comes first.
 fn direction_sections(db: &Connection, from: &str, to: &str, word: &str) -> rusqlite::Result<Vec<Section>> {
     let mut words = vec![word.to_string()];
     let mut statement = db.prepare("select lemma from lemma where lang = ?1 and form = ?2")?;
@@ -77,7 +69,6 @@ fn direction_sections(db: &Connection, from: &str, to: &str, word: &str) -> rusq
             sections.push(Section { heading: format!("{word} ({from} → {to})"), rows });
         }
     }
-    sections.sort_by(|a, b| b.rows[0].score.total_cmp(&a.rows[0].score));
     Ok(sections)
 }
 
@@ -102,7 +93,10 @@ mod tests {
         db.execute_batch(
             "create table meaning(direction text, word text, translation text, sense text, score real);
              create table lemma(lang text, form text, lemma text);
+             create table language(code text);
+             insert into language values ('en'), ('es');
              insert into meaning values
+               ('es-en', 'house', 'house music', '', 2),
                ('en-es', 'house', 'casa', '', 256.1),
                ('en-es', 'house', 'cámara', 'debating chamber', 112.5),
                ('es-en', 'casa', 'house', '', 200),
@@ -130,8 +124,9 @@ mod tests {
 
     #[test]
     fn lookup_rules() {
-        // Found in both directions: Spanish to English first.
-        assert_eq!(run("tr pan").0, ["pan (es → en)", "pan (en → es)"]);
+        // Found in both directions: the best score first, whatever the direction.
+        assert_eq!(run("tr pan").0, ["pan (en → es)", "pan (es → en)"]);
+        assert_eq!(run("tr house").0, ["house (en → es)", "house (es → en)"]);
         // Two base forms: the better score first. Case does not matter.
         assert_eq!(run("tr Casas").0, ["casa (es → en)", "casar (es → en)"]);
         // Rows by score.

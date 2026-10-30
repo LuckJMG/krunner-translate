@@ -58,6 +58,9 @@ def main(folder, output):
     db = sqlite3.connect(output)
     db.execute("create table meaning(direction text, word text, translation text, sense text, score real)")
     db.execute("create table lemma(lang text, form text, lemma text)")
+    # Read by the runner to know the installed languages. A scan of `meaning` would take 10 ms.
+    db.execute("create table language(code text)")
+    db.executemany("insert into language values (?)", [("en",), ("es",)])
     for direction in ("en-es", "es-en"):
         db.executemany("insert into meaning values (?, ?, ?, ?, ?)", meanings(read_only(f"{folder}/{direction}.sqlite3"), direction))
     db.executemany("insert into lemma values (?, ?, ?)", english_lemmas(read_only(f"{folder}/en.sqlite3")))
@@ -77,6 +80,7 @@ def check(db):
     assert count("select count(*) from meaning where direction = 'en-es' and word = 'house' and translation = 'casa'") == 1
     assert count("select count(*) from lemma where lang = 'es' and form = 'casas' and lemma = 'casa'") == 1
     assert count("select count(*) from lemma where lang = 'en' and form = 'houses' and lemma = 'house'") == 1
+    assert count("select count(*) from language") == 2
     assert count("select count(*) from meaning") > 100_000
     assert count("select count(*) from lemma") > 100_000
     assert count("select count(*) from (select 1 from meaning group by direction, word, translation having count(*) > 1)") == 0
