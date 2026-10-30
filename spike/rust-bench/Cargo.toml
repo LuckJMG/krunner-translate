@@ -1,0 +1,12 @@
+[package]
+name = "rust-bench"
+version = "0.0.0"
+edition = "2021"
+
+[profile.release]
+lto = true
+
+[dependencies]
+pollster = "1.0.1"
+rusqlite = { version = "0.41.1", features = ["bundled"] }
+zbus = "6.1.0"

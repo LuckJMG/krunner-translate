@@ -1,0 +1,16 @@
+[Desktop Entry]
+Name=Translate probe
+Comment=Throwaway probe for the krunner-translate project
+X-KDE-ServiceTypes=Plasma/Runner
+Type=Service
+Icon=accessories-dictionary
+X-KDE-PluginInfo-Name=krunner-translate-probe
+X-KDE-PluginInfo-Version=0.0
+X-KDE-PluginInfo-License=MIT
+X-KDE-PluginInfo-EnabledByDefault=true
+X-Plasma-API=DBus2
+X-Plasma-DBusRunner-Service=net.krunnertranslate.probe
+X-Plasma-DBusRunner-Path=/runner
+X-Plasma-Runner-Syntaxes=tr :q:
+X-Plasma-Runner-Syntax-Descriptions=Probe: tr N returns N rows
+X-Plasma-Request-Actions-Once=true

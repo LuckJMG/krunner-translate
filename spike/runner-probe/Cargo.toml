@@ -1,0 +1,11 @@
+[package]
+name = "runner-probe"
+version = "0.0.0"
+edition = "2021"
+
+[profile.release]
+lto = true
+
+[dependencies]
+async-io = "2.6.0"
+zbus = "6.1.0"
