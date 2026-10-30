@@ -5,7 +5,12 @@ edition = "2024"
 license = "GPL-3.0-or-later"
 
 [dependencies]
-rusqlite = { version = "0.41.1", features = ["bundled"] }
+flate2 = "1.1.10"
+rusqlite = { version = "0.41.1", features = ["bundled", "serialize"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+ureq = { version = "3", default-features = false, features = ["rustls"] }
 zbus = "6.1.0"
 
 [profile.release]

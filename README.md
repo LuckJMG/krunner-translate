@@ -69,12 +69,20 @@ The main language and the second language decide the target of a query without l
 | `krunner-translate list` | Prints the settings file, the main language, the second language, and the installed languages. |
 | `krunner-translate set main fr` | Sets the main language. The language must be installed. |
 | `krunner-translate set second es` | Sets the second language. |
+| `krunner-translate add` | Lists the available languages. |
+| `krunner-translate add fr` | Downloads the language packs, and adds the language. The program shows the download size and asks first. |
+| `krunner-translate remove fr` | Removes a language, after a question. You cannot remove the main or the second language. |
+| `krunner-translate help` | Prints the commands. |
 
 If you set a language that is already the other one, the two languages swap. A change works at once. The settings are in `~/.config/krunner-translate/config.ini`.
 
 ## Languages
 
-Version 0.1 beta has English and Spanish only. If you type a code that is not installed, such as `tr fr: maison`, KRunner shows "Language fr is not installed". A command to add more languages is planned. It does not exist yet.
+The dictionary has English and Spanish at the start. Other languages come in packs. Each pack is a file in the release `data-v1` of this repository. The packs are English, Spanish, and French. French has base forms for nouns and adjectives only, not for verbs.
+
+To add a language, run `krunner-translate add fr`. The program downloads the packs, checks their SHA-256, and adds them in one step. If a pack is wrong, nothing changes. A new language comes with the pairs to every installed language.
+
+If you type a code that is not installed, such as `tr de: haus`, KRunner shows "Language de is not installed". A query without language markers searches only between the main and the second language. To search from another language, type its code, for example `tr fr: maison`.
 
 ## Uninstall
 
@@ -103,7 +111,7 @@ The tests use no dictionary file. To make the language packs and the dictionary 
 tools/build-release.sh <output folder> <dictionary.sqlite3>
 ```
 
-The script builds the program in a Debian 11 container with `podman`, so the program runs on every system with glibc 2.30 or newer. It also compresses the dictionary and writes `SHA256SUMS` and `THIRD-PARTY-NOTICES`.
+The script builds the program in a Debian 11 container with `podman`, so the program runs on every system with glibc 2.30 or newer. It also compresses the dictionary and writes `SHA256SUMS` and `THIRD-PARTY-NOTICES`. The language packs come from `tools/build_packs.py packs`. Upload them to the release `data-v1`.
 
 ## Data and attribution
 
