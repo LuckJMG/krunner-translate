@@ -1,12 +1,15 @@
-// KRunner D-Bus runner for `tr [from:][:to] text`. KRunner starts this program on demand (see install/).
+// KRunner D-Bus runner for `tr [from:][:to] text`. KRunner starts this program on demand, with no argument (see install/).
+// A call with an argument runs a command instead (see commands.rs).
 use krunner_translate::{
+    commands,
     lookup::{Outcome, lookup},
     parser::parse,
+    settings::{Settings, config_path, dictionary_path},
 };
 use rusqlite::{Connection as Db, OpenFlags};
 use std::{
     collections::HashMap,
-    process::Command,
+    process::{Command, ExitCode},
     sync::{
         Mutex,
         atomic::{AtomicU64, Ordering},
@@ -120,7 +123,8 @@ impl Runner {
         let Some(db) = &self.db else {
             return vec![to_dbus(status_row("Dictionary not found", &self.db_path))];
         };
-        let rows = match lookup(&db.lock().unwrap(), &query) {
+        // Read on every call, so a `set` command works at once. The file is small.
+        let rows = match lookup(&db.lock().unwrap(), &query, &Settings::load(&config_path())) {
             Ok(outcome) => build_rows(&outcome),
             Err(error) => vec![status_row("Dictionary error", &error.to_string())],
         };
@@ -153,16 +157,18 @@ impl Runner {
     fn set_activation_token(&self, _token: &str) {}
 }
 
-fn main() {
-    let data_home = std::env::var("XDG_DATA_HOME")
-        .unwrap_or_else(|_| format!("{}/.local/share", std::env::var("HOME").unwrap_or_default()));
-    let db_path = format!("{data_home}/krunner-translate/dictionary.sqlite3");
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if !args.is_empty() {
+        return commands::run(&args);
+    }
+    let db_path = dictionary_path();
     let db = Db::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok().map(Mutex::new);
     // The connection runs on zbus's own helper thread, so the main thread only waits.
     let _conn = zbus::block_on(
         connection::Builder::session()
             .name("net.krunnertranslate.runner")
-            .serve_at("/runner", Runner { db, db_path })
+            .serve_at("/runner", Runner { db, db_path: db_path.display().to_string() })
             .build(),
     )
     .expect("connect to the session bus");

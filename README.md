@@ -60,6 +60,18 @@ Only known language codes count as language markers. In any other case, the firs
 
 Each section has a heading with the word, the direction, and the base form. Each row shows one translation. The gray text under the row is the meaning of the word. Press Enter on a row to copy the translation.
 
+## Settings and commands
+
+The main language and the second language decide the target of a query without language markers. The defaults are `en` and `es`. Use the commands in a terminal. The program is `~/.local/bin/krunner-translate`.
+
+| Command | Result |
+|---|---|
+| `krunner-translate list` | Prints the settings file, the main language, the second language, and the installed languages. |
+| `krunner-translate set main fr` | Sets the main language. The language must be installed. |
+| `krunner-translate set second es` | Sets the second language. |
+
+If you set a language that is already the other one, the two languages swap. A change works at once. The settings are in `~/.config/krunner-translate/config.ini`.
+
 ## Languages
 
 Version 0.1 beta has English and Spanish only. If you type a code that is not installed, such as `tr fr: maison`, KRunner shows "Language fr is not installed". A command to add more languages is planned. It does not exist yet.

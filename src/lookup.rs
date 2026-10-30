@@ -1,11 +1,7 @@
 // Finds translations for a parsed query in dictionary.sqlite3 (tables `meaning`, `lemma` and `language`, see tools/build_packs.py).
-use crate::parser::Query;
+use crate::{parser::Query, settings::Settings};
 use rusqlite::Connection;
 use std::collections::BTreeSet;
-
-// Fixed for now. A settings file comes later.
-const MAIN: &str = "en";
-const SECOND: &str = "es";
 
 pub struct Row {
     pub translation: String,
@@ -26,19 +22,20 @@ pub enum Outcome {
     NotFound,
 }
 
-pub fn lookup(db: &Connection, query: &Query) -> rusqlite::Result<Outcome> {
+pub fn lookup(db: &Connection, query: &Query, settings: &Settings) -> rusqlite::Result<Outcome> {
     let installed = installed_languages(db)?;
     for code in [&query.from, &query.to].into_iter().flatten() {
         if !installed.contains(code) {
             return Ok(Outcome::MissingLanguage(code.clone()));
         }
     }
-    // Without `from:`, Spanish to English comes before English to Spanish. This only decides ties in the final order.
+    let Settings { main, second } = settings;
+    // Without `from:`, second to main comes before main to second. This only decides ties in the final order.
     let directions: Vec<(String, String)> = match (&query.from, &query.to) {
         (Some(from), Some(to)) => vec![(from.clone(), to.clone())],
-        (Some(from), None) => vec![(from.clone(), (if from == MAIN { SECOND } else { MAIN }).to_string())],
+        (Some(from), None) => vec![(from.clone(), (if from == main { second } else { main }).clone())],
         (None, Some(to)) => installed.iter().filter(|lang| *lang != to).map(|lang| (lang.clone(), to.clone())).collect(),
-        (None, None) => vec![(SECOND.to_string(), MAIN.to_string()), (MAIN.to_string(), SECOND.to_string())],
+        (None, None) => vec![(second.clone(), main.clone()), (main.clone(), second.clone())],
     };
     let word = query.text.to_lowercase();
     let mut sections = Vec::new();
@@ -50,7 +47,7 @@ pub fn lookup(db: &Connection, query: &Query) -> rusqlite::Result<Outcome> {
     Ok(if sections.is_empty() { Outcome::NotFound } else { Outcome::Sections(sections) })
 }
 
-fn installed_languages(db: &Connection) -> rusqlite::Result<BTreeSet<String>> {
+pub fn installed_languages(db: &Connection) -> rusqlite::Result<BTreeSet<String>> {
     let mut statement = db.prepare("select code from language")?;
     statement.query_map([], |row| row.get::<_, String>(0))?.collect()
 }
@@ -94,7 +91,7 @@ mod tests {
             "create table meaning(direction text, word text, translation text, sense text, score real);
              create table lemma(lang text, form text, lemma text);
              create table language(code text);
-             insert into language values ('en'), ('es');
+             insert into language values ('en'), ('es'), ('fr');
              insert into meaning values
                ('es-en', 'house', 'house music', '', 2),
                ('en-es', 'house', 'casa', '', 256.1),
@@ -103,16 +100,22 @@ mod tests {
                ('es-en', 'casa', 'home', '', 150),
                ('es-en', 'casar', 'marry', '', 100),
                ('en-es', 'pan', 'sartén', '', 90),
-               ('es-en', 'pan', 'bread', '', 80);
+               ('es-en', 'pan', 'bread', '', 80),
+               ('fr-en', 'maison', 'house', '', 90),
+               ('fr-es', 'maison', 'casa', '', 80);
              insert into lemma values ('es', 'casas', 'casar'), ('es', 'casas', 'casa');",
         )
         .unwrap();
         db
     }
 
-    /// The headings and the translations of the first section for a query text.
+    /// The headings and the translations of the first section for a query text, with the default settings.
     fn run(text: &str) -> (Vec<String>, Vec<String>) {
-        match lookup(&test_db(), &parse(text).unwrap()).unwrap() {
+        run_with(text, &Settings::default())
+    }
+
+    fn run_with(text: &str, settings: &Settings) -> (Vec<String>, Vec<String>) {
+        match lookup(&test_db(), &parse(text).unwrap(), settings).unwrap() {
             Outcome::Sections(sections) => (
                 sections.iter().map(|s| s.heading.clone()).collect(),
                 sections[0].rows.iter().map(|r| r.translation.clone()).collect(),
@@ -135,8 +138,14 @@ mod tests {
         assert_eq!(run("tr en: house").0, ["house (en → es)"]);
         assert_eq!(run("tr :es house").0, ["house (en → es)"]);
         assert_eq!(run("tr es:en pan").0, ["pan (es → en)"]);
+        // The main language is the target. A third language shows it.
+        assert_eq!(run("tr fr: maison").0, ["maison (fr → en)"]);
+        let spanish_main = Settings { main: "es".into(), second: "en".into() };
+        assert_eq!(run_with("tr fr: maison", &spanish_main).0, ["maison (fr → es)"]);
+        // From the main language, the target is the second language.
+        assert_eq!(run_with("tr es: casa", &spanish_main).0, ["casa (es → en)"]);
         // A language without data, a pair without data, a word without data.
-        assert_eq!(run("tr fr: house").0, ["missing fr"]);
+        assert_eq!(run("tr de: house").0, ["missing de"]);
         assert_eq!(run("tr en:en house").0, ["not found"]);
         assert_eq!(run("tr zzzxq").0, ["not found"]);
     }
