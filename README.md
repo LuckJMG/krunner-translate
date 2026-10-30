@@ -42,6 +42,8 @@ The script installs these files in your home folder. It does not use `sudo`.
 | KRunner descriptor | `~/.local/share/krunner/dbusplugins/krunner-translate.desktop` |
 | D-Bus service | `~/.local/share/dbus-1/services/net.krunnertranslate.runner.service` |
 
+If a dictionary file exists, the script keeps it, so the languages that you added stay. To reset the dictionary, delete the file and run the script again.
+
 The script restarts KRunner. KRunner starts the program when you type `tr`. The program stops a few seconds after the last query.
 
 ## Use
