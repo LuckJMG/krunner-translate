@@ -71,7 +71,10 @@ fn list() -> Result<(), String> {
     println!("Settings file: {}", config_path().display());
     println!("Main language: {}", settings.main);
     println!("Second language: {}", settings.second);
-    println!("Installed languages: {}", installed.into_iter().collect::<Vec<_>>().join(" "));
+    println!("Installed languages:");
+    for language in installed {
+        println!("- {language}");
+    }
     Ok(())
 }
 
@@ -93,10 +96,11 @@ fn add(code: Option<&str>) -> Result<(), String> {
     let installed = installed()?;
     let available = manifest.languages();
     let Some(code) = code else {
-        let list: Vec<String> =
-            available.iter().map(|lang| if installed.contains(lang) { format!("{lang} (installed)") } else { lang.clone() }).collect();
-        println!("Available languages: {}", list.join(" "));
-        println!("Add one with: krunner-translate add <code>");
+        println!("Available languages:");
+        for language in &available {
+            println!("- {language}{}", if installed.contains(language) { " (installed)" } else { "" });
+        }
+        println!("\nAdd one with: krunner-translate add <code>");
         return Ok(());
     };
     if installed.contains(code) {
