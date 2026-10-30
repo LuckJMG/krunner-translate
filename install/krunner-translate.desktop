@@ -1,0 +1,15 @@
+[Desktop Entry]
+Name=Translate
+Comment=Translate words between English and Spanish
+X-KDE-ServiceTypes=Plasma/Runner
+Type=Service
+Icon=accessories-dictionary
+X-KDE-PluginInfo-Name=krunner-translate
+X-KDE-PluginInfo-Version=0.1.0
+X-KDE-PluginInfo-EnabledByDefault=true
+X-Plasma-API=DBus2
+X-Plasma-DBusRunner-Service=net.krunnertranslate.runner
+X-Plasma-DBusRunner-Path=/runner
+X-Plasma-Runner-Syntaxes=tr :q:
+X-Plasma-Runner-Syntax-Descriptions=Translate a word or phrase. Languages are optional: tr es: casa, tr :es house, tr en:es house
+X-Plasma-Request-Actions-Once=true
