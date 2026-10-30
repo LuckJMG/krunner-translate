@@ -1,4 +1,4 @@
-// Finds translations for a parsed query in dictionary.sqlite3 (tables `meaning`, `lemma` and `language`, see tools/build_dictionary.py).
+// Finds translations for a parsed query in dictionary.sqlite3 (tables `meaning`, `lemma` and `language`, see tools/build_packs.py).
 use crate::parser::Query;
 use rusqlite::Connection;
 use std::collections::BTreeSet;

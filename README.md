@@ -83,7 +83,7 @@ cargo build --release
 cargo test
 ```
 
-The tests use no dictionary file. To make the dictionary file, read the header of `tools/build_dictionary.py`. It lists the files to download and the command to run.
+The tests use no dictionary file. To make the language packs and the dictionary file, read the header of `tools/build_packs.py`. It lists the files to download and the commands to run.
 
 ## Make a release (maintainers)
 
@@ -101,7 +101,7 @@ The dictionary file `dictionary.sqlite3` is made from these sources:
 - Spanish base forms: the Spanish Wiktionary data from [kaikki.org](https://kaikki.org). It comes from [Wiktionary](https://www.wiktionary.org) contributors and is under Creative Commons BY-SA.
 - English base forms: WikDict.
 
-`tools/build_dictionary.py` changes the data. It merges and filters the translations, keeps the best score for each word, and adds indexes and a table of base forms.
+`tools/build_packs.py` changes the data. It merges and filters the translations, keeps the best score for each word, and builds the tables of base forms. It writes one pack for each pair and each language. The `merge` command joins packs into the dictionary file.
 
 The dictionary file is licensed under [Creative Commons Attribution-ShareAlike 4.0](https://creativecommons.org/licenses/by-sa/4.0/). WikDict does not state a license version on its site. The file is a changed copy of that data.
 
