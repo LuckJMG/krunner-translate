@@ -82,7 +82,7 @@ If you set a language that is already the other one, the two languages swap. A c
 
 ## Languages
 
-The dictionary has English and Spanish at the start. Other languages come in packs. Each pack is a file in the release `data-v1` of this repository. The packs are English, Spanish, and French. All three languages have base forms for verbs.
+The dictionary has English and Spanish at the start. Other languages come in packs. The packs of one language sit in one bundle file in the release `data-v2` of this repository. The program downloads only the parts that it needs. The packs are English, Spanish, and French. All three languages have base forms for verbs.
 
 To add a language, run `krunner-translate add fr`. The program downloads the packs, checks their SHA-256, and adds them in one step. If a pack is wrong, nothing changes. A new language comes with the pairs to every installed language.
 
@@ -115,7 +115,7 @@ The tests use no dictionary file. To make the language packs and the dictionary 
 tools/build-release.sh <output folder> <dictionary.sqlite3>
 ```
 
-The script builds the program in a Debian 11 container with `podman`, so the program runs on every system with glibc 2.30 or newer. It also compresses the dictionary and writes `SHA256SUMS` and `THIRD-PARTY-NOTICES`. The language packs come from `tools/build_packs.py packs`. Upload them to the release `data-v1`.
+The script builds the program in a Debian 11 container with `podman`, so the program runs on every system with glibc 2.30 or newer. It also compresses the dictionary and writes `SHA256SUMS` and `THIRD-PARTY-NOTICES`. The language packs come from `tools/build_packs.py packs`. Upload the bundle files and `packs.json` to the release `data-v2`.
 
 ## Data and attribution
 
@@ -125,7 +125,7 @@ The dictionary file `dictionary.sqlite3` is made from these sources:
 - Spanish base forms: the Spanish Wiktionary data from [kaikki.org](https://kaikki.org). It comes from [Wiktionary](https://www.wiktionary.org) contributors and is under Creative Commons BY-SA.
 - English base forms: WikDict.
 
-`tools/build_packs.py` changes the data. It merges and filters the translations, keeps the best score for each word, and builds the tables of base forms. It writes one pack for each pair and each language. The `merge` command joins packs into the dictionary file.
+`tools/build_packs.py` changes the data. It merges and filters the translations, keeps the best score for each word, and builds the tables of base forms. It writes one pack for each pair and each language, and puts the packs of one language in one bundle file. The `merge` command joins packs into the dictionary file.
 
 The dictionary file is licensed under [Creative Commons Attribution-ShareAlike 4.0](https://creativecommons.org/licenses/by-sa/4.0/). WikDict does not state a license version on its site. The file is a changed copy of that data.
 

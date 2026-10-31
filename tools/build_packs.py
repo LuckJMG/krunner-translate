@@ -1,8 +1,11 @@
 """Builds the language packs, and merges packs into dictionary.sqlite3. Runs on the developer machine.
 
-A pack is one gzip file with one SQLite file inside. packs.json lists every pack (file, size, SHA-256) and the data format number.
+A pack is one gzip file with one SQLite file inside.
   meaning-<from>-<to>   table `meaning`: one translation direction, from a WikDict pair file
   lemma-<lang>          table `lemma`: the base forms of one language
+The packs of one source language sit one after the other in one bundle file, bundle-<lang>.bin: its lemma pack and all
+meaning-<lang>-* packs. packs.json lists every pack (bundle file, offset, size, SHA-256) and the data format number.
+The program downloads only the byte range of each pack that it needs (HTTP Range request).
 A dictionary holds the tables `meaning`, `lemma` and `language`. `add` in the program does the same merge as `merge` here.
 
 Input folder, downloaded by hand (licenses: WikDict CC BY-SA, kaikki.org CC BY-SA 4.0 and GFDL):
@@ -16,6 +19,7 @@ Run:
 """
 import gzip
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -23,7 +27,7 @@ import sqlite3
 import sys
 import unicodedata
 
-FORMAT = 1  # An older program must refuse packs with a higher number.
+FORMAT = 2  # An older program must refuse packs with a higher number. 2: bundles with byte ranges (1: one file for each pack).
 MEANING = "create table meaning(direction text, word text, translation text, sense text, score real)"
 LEMMA = "create table lemma(lang text, form text, lemma text)"
 PAIRS = ["en-es", "es-en", "fr-en", "en-fr", "fr-es", "es-fr"]
@@ -87,27 +91,29 @@ def accent_lemmas(lang, lemmas, headwords):
     return [row for row in rows if row[1] != row[2]]  # A word never maps to itself.
 
 
-def write_pack(pack_folder, name, create_sql, rows):
-    """Writes <name>.sqlite3.gz. The gzip header has no time, so the same rows give the same SHA-256."""
-    path = f"{pack_folder}/{name}.sqlite3"
+def make_pack(pack_folder, name, create_sql, rows):
+    """The gzip bytes of one pack. The gzip header has no time, so the same rows give the same bytes."""
+    path = f"{pack_folder}/tmp-{name}.sqlite3"
     db = sqlite3.connect(path)
     db.execute(create_sql)
     db.executemany(f"insert into {name.split('-')[0]} values ({','.join('?' * len(rows[0]))})", rows)
     db.commit()
     db.execute("vacuum")
     db.close()
-    with open(path, "rb") as src, open(path + ".gz", "wb") as out:
+    with open(path, "rb") as src, io.BytesIO() as out:
         with gzip.GzipFile(filename="", mode="wb", fileobj=out, compresslevel=9, mtime=0) as gz:
             shutil.copyfileobj(src, gz)
-    os.remove(path)
-    data = open(path + ".gz", "rb").read()
-    return {"file": f"{name}.sqlite3.gz", "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+        os.remove(path)
+        return out.getvalue()
 
 
 def open_pack(pack_folder, manifest, name):
     """The pack as an in-memory database, after a SHA-256 check."""
-    data = open(f"{pack_folder}/{manifest['packs'][name]['file']}", "rb").read()
-    assert hashlib.sha256(data).hexdigest() == manifest["packs"][name]["sha256"], f"wrong checksum: {name}"
+    pack = manifest["packs"][name]
+    with open(f"{pack_folder}/{pack['file']}", "rb") as bundle:
+        bundle.seek(pack["offset"])
+        data = bundle.read(pack["size"])
+    assert hashlib.sha256(data).hexdigest() == pack["sha256"], f"wrong checksum: {name}"
     db = sqlite3.connect(":memory:")
     db.deserialize(gzip.decompress(data))
     return db
@@ -116,21 +122,27 @@ def open_pack(pack_folder, manifest, name):
 def build_packs(folder, pack_folder):
     os.makedirs(pack_folder, exist_ok=True)
     packs = {}
-    headwords = {lang: set() for lang in LEMMAS}
-    for pair in PAIRS:
-        name = f"meaning-{pair}"
-        rows = meanings(read_only(f"{folder}/{pair}.sqlite3"), pair)
-        headwords[pair.split("-")[0]].update(row[1] for row in rows)
-        packs[name] = write_pack(pack_folder, name, MEANING, rows)
     for lang, read in LEMMAS.items():
-        name = f"lemma-{lang}"
+        # The meaning packs come first: their words feed the accent rows of the lemma pack.
+        data, headwords = {}, set()
+        for pair in (pair for pair in PAIRS if pair.startswith(f"{lang}-")):
+            rows = meanings(read_only(f"{folder}/{pair}.sqlite3"), pair)
+            headwords.update(row[1] for row in rows)
+            data[f"meaning-{pair}"] = make_pack(pack_folder, f"meaning-{pair}", MEANING, rows)
         lemmas = read(lang, folder)
-        packs[name] = write_pack(pack_folder, name, LEMMA, sorted(set(lemmas) | set(accent_lemmas(lang, lemmas, headwords[lang]))))
+        lemma_rows = sorted(set(lemmas) | set(accent_lemmas(lang, lemmas, headwords)))
+        data = {f"lemma-{lang}": make_pack(pack_folder, f"lemma-{lang}", LEMMA, lemma_rows), **data}
+        bundle, offset = f"bundle-{lang}.bin", 0
+        with open(f"{pack_folder}/{bundle}", "wb") as out:
+            for name, pack in data.items():
+                out.write(pack)
+                packs[name] = {"file": bundle, "offset": offset, "size": len(pack), "sha256": hashlib.sha256(pack).hexdigest()}
+                offset += len(pack)
     manifest = {"format": FORMAT, "packs": packs}
     json.dump(manifest, open(f"{pack_folder}/packs.json", "w"), indent=2, sort_keys=True)
     check_packs(pack_folder, manifest)
-    for name, pack in packs.items():
-        print(f"{name}: {pack['size'] / 1024 / 1024:.1f} MB")
+    for lang in LEMMAS:
+        print(f"bundle-{lang}.bin: {os.path.getsize(f'{pack_folder}/bundle-{lang}.bin') / 1024 / 1024:.1f} MB")
 
 
 def check_packs(pack_folder, manifest):
