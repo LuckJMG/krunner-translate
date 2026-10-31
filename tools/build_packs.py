@@ -9,6 +9,7 @@ Input folder, downloaded by hand (licenses: WikDict CC BY-SA, kaikki.org CC BY-S
   <from>-<to>.sqlite3 for each pair in PAIRS, en.sqlite3, fr.sqlite3   https://download.wikdict.com/dictionaries/sqlite/2/<name>.sqlite3
   kaikki-es.jsonl                                                      https://kaikki.org/dictionary/Spanish/kaikki.org-dictionary-Spanish.jsonl
   kaikki-fr.jsonl                                                      https://kaikki.org/dictionary/French/kaikki.org-dictionary-French.jsonl
+  kaikki-en.jsonl                                                      https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl
 Run:
   python3 -I tools/build_packs.py packs <input folder> <pack folder>
   python3 -I tools/build_packs.py merge <pack folder> <output file> <language> <language>...
@@ -69,9 +70,8 @@ def both_lemmas(lang, folder):
     return sorted(set(wikdict_lemmas(lang, folder)) | set(kaikki_lemmas(lang, folder)))
 
 
-# Spanish has no usable base forms in WikDict, so it comes from the kaikki.org dump. French uses both sources.
-# English has no verb forms yet.
-LEMMAS = {"en": wikdict_lemmas, "es": kaikki_lemmas, "fr": both_lemmas}
+# Spanish has no usable base forms in WikDict, so it comes from the kaikki.org dump. English and French use both sources.
+LEMMAS = {"en": both_lemmas, "es": kaikki_lemmas, "fr": both_lemmas}
 
 
 def write_pack(pack_folder, name, create_sql, rows):
@@ -123,6 +123,8 @@ def check_packs(pack_folder, manifest):
     assert count("meaning-en-es", "select count(*) from meaning where word = 'house' and translation = 'casa'") == 1
     assert count("meaning-fr-en", "select count(*) from meaning where word = 'maison' and translation = 'house'") == 1
     assert count("lemma-en", "select count(*) from lemma where form = 'houses' and lemma = 'house'") == 1
+    for form, lemma in [("walked", "walk"), ("ran", "run"), ("was", "be"), ("went", "go")]:
+        assert count("lemma-en", f"select count(*) from lemma where form = '{form}' and lemma = '{lemma}'") == 1, form
     assert count("lemma-es", "select count(*) from lemma where form = 'casas' and lemma = 'casa'") == 1
     assert count("lemma-fr", "select count(*) from lemma where form = 'maisons' and lemma = 'maison'") == 1
     for form, lemma in [("mangeons", "manger"), ("suis", "être"), ("allé", "aller"), ("belles", "belle")]:

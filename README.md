@@ -80,7 +80,7 @@ If you set a language that is already the other one, the two languages swap. A c
 
 ## Languages
 
-The dictionary has English and Spanish at the start. Other languages come in packs. Each pack is a file in the release `data-v1` of this repository. The packs are English, Spanish, and French. Spanish and French have base forms for verbs. English has base forms for nouns and adjectives only.
+The dictionary has English and Spanish at the start. Other languages come in packs. Each pack is a file in the release `data-v1` of this repository. The packs are English, Spanish, and French. All three languages have base forms for verbs.
 
 To add a language, run `krunner-translate add fr`. The program downloads the packs, checks their SHA-256, and adds them in one step. If a pack is wrong, nothing changes. A new language comes with the pairs to every installed language.
 
