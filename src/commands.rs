@@ -15,6 +15,7 @@ const USAGE: &str = "Usage:
   krunner-translate list                     Show the settings and the installed languages
   krunner-translate set main|second <code>   Set the main or the second language
   krunner-translate add [<code>]             List the available languages, or install one
+  krunner-translate update <code>            Download an installed language again
   krunner-translate remove <code>            Remove an installed language
   krunner-translate help                     Show this text";
 
@@ -25,6 +26,7 @@ pub fn run(args: &[String]) -> ExitCode {
         ["set", which, code] => set(which, code),
         ["add"] => add(None),
         ["add", code] => add(Some(code)),
+        ["update", code] => update(code),
         ["remove", code] => remove(code),
         ["help" | "--help" | "-h"] => {
             println!("{USAGE}");
@@ -112,13 +114,34 @@ fn add(code: Option<&str>) -> Result<(), String> {
     let names = packs::needed(code, &installed);
     let megabytes = manifest.size(&names)? as f64 / 1024.0 / 1024.0;
     confirm(&format!("Download {} packs ({megabytes:.1} MB) and add language {code}?", names.len()))?;
+    let downloads = download_all(&manifest, names)?;
+    packs::merge(&mut open(OpenFlags::SQLITE_OPEN_READ_WRITE)?, code, &downloads)?;
+    println!("Added language {code}.");
+    Ok(())
+}
+
+fn download_all(manifest: &Manifest, names: Vec<String>) -> Result<Vec<(String, Vec<u8>)>, String> {
     let mut downloads = Vec::new();
     for name in names {
         println!("Downloading {name}");
         downloads.push((name.clone(), manifest.download(&name)?));
     }
-    packs::merge(&mut open(OpenFlags::SQLITE_OPEN_READ_WRITE)?, code, &downloads)?;
-    println!("Added language {code}.");
+    Ok(downloads)
+}
+
+/// Downloads the packs of an installed language again and replaces its data. For example after a fix in the packs.
+fn update(code: &str) -> Result<(), String> {
+    let manifest = Manifest::fetch()?;
+    let installed = installed()?;
+    if !installed.contains(code) {
+        return Err(format!("Language {code} is not installed."));
+    }
+    let names = packs::needed(code, &installed);
+    let megabytes = manifest.size(&names)? as f64 / 1024.0 / 1024.0;
+    confirm(&format!("Download {} packs ({megabytes:.1} MB) and replace the data of language {code}?", names.len()))?;
+    let downloads = download_all(&manifest, names)?;
+    packs::update(&mut open(OpenFlags::SQLITE_OPEN_READ_WRITE)?, code, &installed, &downloads)?;
+    println!("Updated language {code}.");
     Ok(())
 }
 

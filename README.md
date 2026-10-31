@@ -73,6 +73,7 @@ The main language and the second language decide the target of a query without l
 | `krunner-translate set second es` | Sets the second language. |
 | `krunner-translate add` | Lists the available languages. |
 | `krunner-translate add fr` | Downloads the language packs, and adds the language. The program shows the download size and asks first. |
+| `krunner-translate update fr` | Downloads the packs of an installed language again, and replaces its data. It works for the main and the second language too. Use it after a fix in the packs. The program asks first. |
 | `krunner-translate remove fr` | Removes a language, after a question. You cannot remove the main or the second language. |
 | `krunner-translate help` | Prints the commands. |
 

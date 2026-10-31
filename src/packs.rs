@@ -1,6 +1,6 @@
 // Language packs: the list (packs.json), the download with its checks, and the merge into the dictionary.
 // tools/build_packs.py makes the packs. A pack is a gzip file with one SQLite file inside.
-use rusqlite::{Connection, MAIN_DB, params_from_iter, types::Value};
+use rusqlite::{Connection, MAIN_DB, Transaction, params_from_iter, types::Value};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::{
@@ -40,10 +40,11 @@ fn get(file: &str) -> Result<Vec<u8>, String> {
     response.body_mut().with_config().limit(MAX_BYTES).read_to_vec().map_err(fail)
 }
 
-/// The packs that `add` needs for a new language: its base forms, and the pairs with every installed language.
+/// The packs of a language: its base forms, and the pairs with every other installed language.
+/// `add` needs them for a new language. `update` needs them again for an installed one.
 pub fn needed(code: &str, installed: &BTreeSet<String>) -> Vec<String> {
     let mut names = vec![format!("lemma-{code}")];
-    for other in installed {
+    for other in installed.iter().filter(|other| *other != code) {
         names.push(format!("meaning-{code}-{other}"));
         names.push(format!("meaning-{other}-{code}"));
     }
@@ -94,9 +95,8 @@ fn check(name: &str, pack: &Pack, data: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-/// Adds the language `code` with its packs. One transaction: if a pack is wrong, nothing changes.
-pub fn merge(db: &mut Connection, code: &str, packs: &[(String, Vec<u8>)]) -> Result<(), String> {
-    let tx = db.transaction().map_err(sql_error)?;
+/// Copies the rows of the packs into the dictionary.
+fn insert_packs(tx: &Transaction, packs: &[(String, Vec<u8>)]) -> Result<(), String> {
     for (name, data) in packs {
         let table = match name.split('-').next() {
             Some("meaning") => "meaning",
@@ -120,14 +120,27 @@ pub fn merge(db: &mut Connection, code: &str, packs: &[(String, Vec<u8>)]) -> Re
             insert.execute(params_from_iter(values)).map_err(sql_error)?;
         }
     }
+    Ok(())
+}
+
+/// Adds the language `code` with its packs. One transaction: if a pack is wrong, nothing changes.
+pub fn merge(db: &mut Connection, code: &str, packs: &[(String, Vec<u8>)]) -> Result<(), String> {
+    let tx = db.transaction().map_err(sql_error)?;
+    insert_packs(&tx, packs)?;
     tx.execute("insert into language values (?1)", [code]).map_err(sql_error)?;
     tx.commit().map_err(sql_error)
 }
 
-/// Removes the language `code`: its pairs with the other installed languages, its base forms and its language row.
-/// The file keeps its size (no vacuum).
-pub fn remove(db: &mut Connection, code: &str, installed: &BTreeSet<String>) -> Result<(), String> {
+/// Replaces the rows of the installed language `code` with the rows of fresh packs. One transaction: if a pack is wrong, nothing changes.
+pub fn update(db: &mut Connection, code: &str, installed: &BTreeSet<String>, packs: &[(String, Vec<u8>)]) -> Result<(), String> {
     let tx = db.transaction().map_err(sql_error)?;
+    delete_rows(&tx, code, installed)?;
+    insert_packs(&tx, packs)?;
+    tx.commit().map_err(sql_error)
+}
+
+/// Deletes the pairs of `code` with the other installed languages and its base forms. The language row stays.
+fn delete_rows(tx: &Transaction, code: &str, installed: &BTreeSet<String>) -> Result<(), String> {
     for other in installed.iter().filter(|other| *other != code) {
         tx.execute(
             "delete from meaning where direction = ?1 or direction = ?2",
@@ -136,6 +149,13 @@ pub fn remove(db: &mut Connection, code: &str, installed: &BTreeSet<String>) -> 
         .map_err(sql_error)?;
     }
     tx.execute("delete from lemma where lang = ?1", [code]).map_err(sql_error)?;
+    Ok(())
+}
+
+/// Removes the language `code`. The file keeps its size (no vacuum).
+pub fn remove(db: &mut Connection, code: &str, installed: &BTreeSet<String>) -> Result<(), String> {
+    let tx = db.transaction().map_err(sql_error)?;
+    delete_rows(&tx, code, installed)?;
     tx.execute("delete from language where code = ?1", [code]).map_err(sql_error)?;
     tx.commit().map_err(sql_error)
 }
@@ -191,6 +211,8 @@ mod tests {
             needed("fr", &languages(&["en", "es"])),
             ["lemma-fr", "meaning-fr-en", "meaning-en-fr", "meaning-fr-es", "meaning-es-fr"]
         );
+        // An installed language is not paired with itself.
+        assert_eq!(needed("fr", &languages(&["en", "fr"])), ["lemma-fr", "meaning-fr-en", "meaning-en-fr"]);
         // The SHA-256 of "abc".
         let abc = Pack { file: String::new(), size: 3, sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".into() };
         assert!(check("p", &abc, b"abc").is_ok());
@@ -222,5 +244,36 @@ mod tests {
         assert_eq!(count(&db, "select count(*) from meaning"), 1);
         assert_eq!(count(&db, "select count(*) from lemma"), 1);
         assert_eq!(count(&db, "select count(*) from language"), 2);
+    }
+
+    #[test]
+    fn update_replaces_one_language() {
+        let mut db = dictionary();
+        db.execute_batch(
+            "insert into language values ('fr');
+             insert into meaning values ('fr-en', 'maison', 'old house', '', 1), ('en-fr', 'house', 'old maison', '', 1);
+             insert into lemma values ('fr', 'maisons', 'old');",
+        )
+        .unwrap();
+        let lemma = pack("create table lemma(lang text, form text, lemma text); insert into lemma values ('fr', 'mangeons', 'manger');");
+        let meaning = pack(
+            "create table meaning(direction text, word text, translation text, sense text, score real);
+             insert into meaning values ('fr-en', 'maison', 'house', '', 2);",
+        );
+        let installed = languages(&["en", "es", "fr"]);
+        // A wrong pack at the end: the old rows stay.
+        let bad = [("lemma-fr".to_string(), lemma.clone()), ("meaning-fr-en".to_string(), meaning.clone()), ("lemma-xx".to_string(), b"bad".to_vec())];
+        assert!(update(&mut db, "fr", &installed, &bad).is_err());
+        assert_eq!(count(&db, "select count(*) from meaning where translation like 'old %'"), 2);
+        assert_eq!(count(&db, "select count(*) from lemma where lemma = 'old'"), 1);
+        // Good packs: the rows of fr are new, the rest and the language row stay.
+        update(&mut db, "fr", &installed, &bad[..2]).unwrap();
+        assert_eq!(count(&db, "select count(*) from meaning where translation like 'old %'"), 0);
+        assert_eq!(count(&db, "select count(*) from meaning where direction = 'fr-en' and translation = 'house'"), 1);
+        assert_eq!(count(&db, "select count(*) from lemma where lang = 'fr' and form = 'mangeons'"), 1);
+        assert_eq!(count(&db, "select count(*) from lemma where lemma = 'old'"), 0);
+        assert_eq!(count(&db, "select count(*) from meaning where direction = 'en-es'"), 1);
+        assert_eq!(count(&db, "select count(*) from language where code = 'fr'"), 1);
+        assert_eq!(count(&db, "select count(*) from language"), 3);
     }
 }
