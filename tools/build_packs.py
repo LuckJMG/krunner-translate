@@ -21,6 +21,7 @@ import os
 import shutil
 import sqlite3
 import sys
+import unicodedata
 
 FORMAT = 1  # An older program must refuse packs with a higher number.
 MEANING = "create table meaning(direction text, word text, translation text, sense text, score real)"
@@ -74,6 +75,18 @@ def both_lemmas(lang, folder):
 LEMMAS = {"en": both_lemmas, "es": kaikki_lemmas, "fr": both_lemmas}
 
 
+def plain(word):
+    """The word without accents: `todavía` becomes `todavia`."""
+    return "".join(char for char in unicodedata.normalize("NFD", word) if not unicodedata.combining(char))
+
+
+def accent_lemmas(lang, lemmas, headwords):
+    """Rows that map a word without accents to the real word, so `tr todavia` finds `todavía` and `tr esta` also finds `estar`."""
+    rows = {(lang, plain(form), lemma) for _, form, lemma in lemmas if plain(form) != form}
+    rows |= {(lang, plain(word), word) for word in headwords if plain(word) != word}
+    return [row for row in rows if row[1] != row[2]]  # A word never maps to itself.
+
+
 def write_pack(pack_folder, name, create_sql, rows):
     """Writes <name>.sqlite3.gz. The gzip header has no time, so the same rows give the same SHA-256."""
     path = f"{pack_folder}/{name}.sqlite3"
@@ -103,12 +116,16 @@ def open_pack(pack_folder, manifest, name):
 def build_packs(folder, pack_folder):
     os.makedirs(pack_folder, exist_ok=True)
     packs = {}
+    headwords = {lang: set() for lang in LEMMAS}
     for pair in PAIRS:
         name = f"meaning-{pair}"
-        packs[name] = write_pack(pack_folder, name, MEANING, meanings(read_only(f"{folder}/{pair}.sqlite3"), pair))
+        rows = meanings(read_only(f"{folder}/{pair}.sqlite3"), pair)
+        headwords[pair.split("-")[0]].update(row[1] for row in rows)
+        packs[name] = write_pack(pack_folder, name, MEANING, rows)
     for lang, read in LEMMAS.items():
         name = f"lemma-{lang}"
-        packs[name] = write_pack(pack_folder, name, LEMMA, read(lang, folder))
+        lemmas = read(lang, folder)
+        packs[name] = write_pack(pack_folder, name, LEMMA, sorted(set(lemmas) | set(accent_lemmas(lang, lemmas, headwords[lang]))))
     manifest = {"format": FORMAT, "packs": packs}
     json.dump(manifest, open(f"{pack_folder}/packs.json", "w"), indent=2, sort_keys=True)
     check_packs(pack_folder, manifest)
@@ -127,6 +144,9 @@ def check_packs(pack_folder, manifest):
         assert count("lemma-en", f"select count(*) from lemma where form = '{form}' and lemma = '{lemma}'") == 1, form
     assert count("lemma-es", "select count(*) from lemma where form = 'casas' and lemma = 'casa'") == 1
     assert count("lemma-fr", "select count(*) from lemma where form = 'maisons' and lemma = 'maison'") == 1
+    # Words without accents map to the real word.
+    for pack, form, lemma in [("lemma-es", "todavia", "todavía"), ("lemma-es", "esta", "estar"), ("lemma-fr", "cafe", "café"), ("lemma-fr", "mange", "manger")]:
+        assert count(pack, f"select count(*) from lemma where form = '{form}' and lemma = '{lemma}'") == 1, form
     for form, lemma in [("mangeons", "manger"), ("suis", "être"), ("allé", "aller"), ("belles", "belle")]:
         assert count("lemma-fr", f"select count(*) from lemma where form = '{form}' and lemma = '{lemma}'") == 1, form
     for name in manifest["packs"]:

@@ -58,7 +58,7 @@ Open KRunner and type `tr`, a space, and a word or phrase.
 | `tr en:es house` | Sets both languages. |
 | `tr casa\: la` | `\:` writes a colon that is not a language marker. |
 
-Only known language codes count as language markers. In any other case, the first word is part of the text.
+You can type a word without its accents, for example `tr todavia`. The program shows the word with accents, and it can also show other words that match. Only known language codes count as language markers. In any other case, the first word is part of the text.
 
 Each section has a heading with the word, the direction, and the base form. Each row shows one translation. The gray text under the row is the meaning of the word. Press Enter on a row to copy the translation.
 
