@@ -63,9 +63,9 @@ impl Settings {
     /// Sets `main` or `second` to an installed language. The two languages never match: the other one takes the old value.
     /// Returns the line to print. Nothing changes on an error.
     pub fn set(&mut self, which: &str, code: &str, installed: &BTreeSet<String>) -> Result<String, String> {
-        let (label, other_label, this, other) = match which {
-            "main" => ("Main", "Second", &mut self.main, &mut self.second),
-            "second" => ("Second", "Main", &mut self.second, &mut self.main),
+        let (label, this, other) = match which {
+            "main" => ("Main", &mut self.main, &mut self.second),
+            "second" => ("Second", &mut self.second, &mut self.main),
             _ => return Err("Use main or second.".into()),
         };
         if !installed.contains(code) {
@@ -74,15 +74,15 @@ impl Settings {
         if this == code {
             return Ok(format!("{label} language is already {code}."));
         }
-        let message = if other == code {
-            format!("{label} language: {code}. {other_label} language: {this} (swapped)")
-        } else {
-            format!("{label} language: {code}")
-        };
-        if other == code {
+        let swapped = other == code;
+        if swapped {
             *other = this.clone();
         }
         *this = code.to_string();
+        let mut message = format!("Main language: {}\nSecond language: {}", self.main, self.second);
+        if swapped {
+            message.push_str("\nSwapped the main and second languages.");
+        }
         Ok(message)
     }
 }
@@ -123,12 +123,13 @@ mod tests {
     fn set_rules() {
         let installed = languages(&["en", "es", "fr"]);
         let mut s = settings("en", "es");
-        assert_eq!(s.set("main", "fr", &installed).unwrap(), "Main language: fr");
+        assert_eq!(s.set("main", "fr", &installed).unwrap(), "Main language: fr\nSecond language: es");
         assert_eq!(s, settings("fr", "es"));
         // The other language takes the old value.
-        assert_eq!(s.set("main", "es", &installed).unwrap(), "Main language: es. Second language: fr (swapped)");
+        let swapped = "\nSwapped the main and second languages.";
+        assert_eq!(s.set("main", "es", &installed).unwrap(), format!("Main language: es\nSecond language: fr{swapped}"));
         assert_eq!(s, settings("es", "fr"));
-        assert_eq!(s.set("second", "es", &installed).unwrap(), "Second language: es. Main language: fr (swapped)");
+        assert_eq!(s.set("second", "es", &installed).unwrap(), format!("Main language: fr\nSecond language: es{swapped}"));
         assert_eq!(s, settings("fr", "es"));
         // Errors change nothing.
         assert_eq!(s.set("main", "fr", &installed).unwrap(), "Main language is already fr.");
