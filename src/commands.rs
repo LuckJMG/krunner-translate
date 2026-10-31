@@ -15,7 +15,7 @@ const USAGE: &str = "Usage:
   krunner-translate list                     Show the settings and the installed languages
   krunner-translate set main|second <code>   Set the main or the second language
   krunner-translate add [<code>]             List the available languages, or install one
-  krunner-translate update <code>|--all      Download an installed language again, or all of them
+  krunner-translate update [<code>]          Download an installed language again, or all of them
   krunner-translate remove <code>            Remove an installed language
   krunner-translate help                     Show this text";
 
@@ -26,8 +26,7 @@ pub fn run(args: &[String]) -> ExitCode {
         ["set", which, code] => set(which, code),
         ["add"] => add(None),
         ["add", code] => add(Some(code)),
-        ["update", "--all" | "-a"] => update(None),
-        ["update"] => Err("Give a language code, or use --all: krunner-translate update --all".into()),
+        ["update"] => update(None),
         ["update", code] => update(Some(code)),
         ["remove", code] => remove(code),
         ["help" | "--help" | "-h"] => {
@@ -132,7 +131,7 @@ fn download_all(manifest: &Manifest, names: Vec<String>) -> Result<Vec<(String, 
 }
 
 /// Downloads the packs of an installed language again and replaces its data, for example after a fix in the packs.
-/// With `None`, it does this for every installed language (`--all`).
+/// With `None`, it does this for every installed language.
 fn update(code: Option<&str>) -> Result<(), String> {
     let manifest = Manifest::fetch()?;
     let installed = installed()?;
