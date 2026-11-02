@@ -82,9 +82,11 @@ If you set a language that is already the other one, the two languages swap. A c
 
 ## Languages
 
-The dictionary has English and Spanish at the start. Other languages come in packs. The packs of one language sit in one bundle file in the release `data-v2` of this repository. The program downloads only the parts that it needs. The packs are English, Spanish, and French. All three languages have base forms for verbs.
+The dictionary has English and Spanish at the start. Other languages come in packs. The packs of one language sit in one bundle file in the release `data-v2` of this repository. The program downloads only the parts that it needs. The languages are English, Spanish, French, Russian, German, Portuguese, and Chinese. All of them except Chinese have base forms for verbs. Chinese has no inflection, so it has no base forms.
 
 To add a language, run `krunner-translate add fr`. The program downloads the packs, checks their SHA-256, and adds them in one step. If a pack is wrong, nothing changes. A new language comes with the pairs to every installed language.
+
+Words with Chinese characters find their other spelling. For example, `tr 汉字` finds `漢字`, because the Simplified and the Traditional spelling map to each other. The Chinese pairs have gaps. For example, the pair from Chinese to English has no entry for `中国`.
 
 If you type a code that is not installed, such as `tr de: haus`, KRunner shows "Language de is not installed". A query without language markers searches only between the main and the second language. To search from another language, type its code, for example `tr fr: maison`.
 
@@ -121,9 +123,11 @@ The script builds the program in a Debian 11 container with `podman`, so the pro
 
 The dictionary file `dictionary.sqlite3` is made from these sources:
 
-- Translations: [WikDict](https://www.wikdict.com) (English-Spanish and Spanish-English). WikDict data comes from Wiktionary and is under Creative Commons BY-SA.
+- Translations: [WikDict](https://www.wikdict.com) (every pair of the seven languages, in both directions). WikDict data comes from Wiktionary and is under Creative Commons BY-SA.
 - Spanish base forms: the Spanish Wiktionary data from [kaikki.org](https://kaikki.org). It comes from [Wiktionary](https://www.wiktionary.org) contributors and is under Creative Commons BY-SA.
-- English base forms: WikDict.
+- English, French, and German base forms: WikDict, and the English, French, and German data from kaikki.org for the verb forms.
+- Russian and Portuguese base forms: the Russian and Portuguese Wiktionary data from kaikki.org.
+- Simplified and Traditional Chinese: the tables of [OpenCC](https://github.com/BYVoid/OpenCC), under the Apache License 2.0. The build uses them. The program does not.
 
 `tools/build_packs.py` changes the data. It merges and filters the translations, keeps the best score for each word, and builds the tables of base forms. It writes one pack for each pair and each language, and puts the packs of one language in one bundle file. The `merge` command joins packs into the dictionary file.
 
