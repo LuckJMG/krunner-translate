@@ -8,7 +8,7 @@ A KRunner plugin that translates words and phrases. It works offline. Type `tr h
 
 ## What it does
 
-- Translates between English and Spanish at the start. You can add French, Russian, German, Portuguese, and Chinese. See the section "Languages".
+- Translates between English and Spanish at the start. You can add French, Russian, German, Portuguese, Chinese, Italian, Dutch, Polish, and Turkish. See the section "Languages".
 - Uses a local dictionary file. No query leaves your machine.
 - Shows base forms. For `casas`, it also shows the result for `casa`.
 - Groups the rows in sections, for example `house (en → es)`. The best match is first.
@@ -19,7 +19,7 @@ A KRunner plugin that translates words and phrases. It works offline. Type `tr h
 - KDE Plasma 6. The plugin was tested on Plasma 6.7.5 only. Other versions can fail.
 - Linux on x86-64 for the prebuilt program. On other machines, the install script builds the program with `cargo`.
 - The tools `curl`, `sha256sum`, and `gzip`.
-- About 100 MB of disk space for the dictionary with English and Spanish. Each language that you add needs more.
+- About 65 MB of disk space for the dictionary with English and Spanish. Each language that you add needs more. Turkish needs the most, because one Turkish word has thousands of forms. A dictionary with English, Spanish, Italian, Dutch, Polish, and Turkish takes about 500 MB.
 
 ## Install
 
@@ -82,7 +82,7 @@ If you set a language that is already the other one, the two languages swap. A c
 
 ## Languages
 
-The dictionary has English and Spanish at the start. Other languages come in packs. The packs of one language sit in one bundle file in the release `data-v2` of this repository. The program downloads only the parts that it needs. The languages are English, Spanish, French, Russian, German, Portuguese, and Chinese. All of them except Chinese have base forms for verbs. Chinese has no inflection, so it has no base forms.
+The dictionary has English and Spanish at the start. Other languages come in packs. The packs of one language sit in one bundle file in the release `data-v2` of this repository. The program downloads only the parts that it needs. The languages are English, Spanish, French, Russian, German, Portuguese, Chinese, Italian, Dutch, Polish, and Turkish. All of them except Chinese have base forms for verbs. Chinese has no inflection, so it has no base forms.
 
 To add a language, run `krunner-translate add fr`. The program downloads the packs, checks their SHA-256, and adds them in one step. If a pack is wrong, nothing changes. A new language comes with the pairs to every installed language.
 
@@ -123,10 +123,11 @@ The script builds the program in a Debian 11 container with `podman`, so the pro
 
 The dictionary file `dictionary.sqlite3` is made from these sources:
 
-- Translations: [WikDict](https://www.wikdict.com) (every pair of the seven languages, in both directions). WikDict data comes from Wiktionary and is under Creative Commons BY-SA.
+- Translations: [WikDict](https://www.wikdict.com) (every pair of the eleven languages, in both directions). WikDict data comes from Wiktionary and is under Creative Commons BY-SA.
 - Spanish base forms: the Spanish Wiktionary data from [kaikki.org](https://kaikki.org). It comes from [Wiktionary](https://www.wiktionary.org) contributors and is under Creative Commons BY-SA.
 - English, French, and German base forms: WikDict, and the English, French, and German data from kaikki.org for the verb forms.
 - Russian and Portuguese base forms: the Russian and Portuguese Wiktionary data from kaikki.org.
+- Italian, Dutch, Polish, and Turkish base forms: the Wiktionary data of these languages from kaikki.org. It includes the lists of forms of each base word.
 - Simplified and Traditional Chinese: the tables of [OpenCC](https://github.com/BYVoid/OpenCC), under the Apache License 2.0. The build uses them. The program does not.
 
 `tools/build_packs.py` changes the data. It merges and filters the translations, keeps the best score for each word, and builds the tables of base forms. It writes one pack for each pair and each language, and puts the packs of one language in one bundle file. The `merge` command joins packs into the dictionary file.
