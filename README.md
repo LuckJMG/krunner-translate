@@ -8,7 +8,7 @@ A KRunner plugin that translates words and phrases. It works offline. Type `tr h
 
 ## What it does
 
-- Translates between English and Spanish. These are the only languages in version 0.1 beta.
+- Translates between English and Spanish at the start. You can add French, Russian, German, Portuguese, and Chinese. See the section "Languages".
 - Uses a local dictionary file. No query leaves your machine.
 - Shows base forms. For `casas`, it also shows the result for `casa`.
 - Groups the rows in sections, for example `house (en → es)`. The best match is first.
@@ -19,7 +19,7 @@ A KRunner plugin that translates words and phrases. It works offline. Type `tr h
 - KDE Plasma 6. The plugin was tested on Plasma 6.7.5 only. Other versions can fail.
 - Linux on x86-64 for the prebuilt program. On other machines, the install script builds the program with `cargo`.
 - The tools `curl`, `sha256sum`, and `gzip`.
-- About 90 MB of disk space for the dictionary.
+- About 100 MB of disk space for the dictionary with English and Spanish. Each language that you add needs more.
 
 ## Install
 

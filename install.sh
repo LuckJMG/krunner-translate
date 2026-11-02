@@ -4,7 +4,7 @@
 # If the prebuilt program does not run on this system, it builds the program with cargo.
 # KRUNNER_TRANSLATE_BASE_URL replaces the download address (for tests, for example file:///path/to/release).
 set -eu
-BASE=${KRUNNER_TRANSLATE_BASE_URL:-https://github.com/LuckJMG/krunner-translate/releases/download/v0.2-beta}
+BASE=${KRUNNER_TRANSLATE_BASE_URL:-https://github.com/LuckJMG/krunner-translate/releases/download/v0.3-beta}
 repo=$(cd "$(dirname "$0")" && pwd)
 data=${XDG_DATA_HOME:-$HOME/.local/share}
 
@@ -52,7 +52,7 @@ if [ "$keep" = no ]; then
     gzip -dc "$tmp/dictionary.sqlite3.gz" > "$dictionary.new"
     mv "$dictionary.new" "$dictionary"
 else
-    echo "Keeping your dictionary ($dictionary). To reset it, delete the file and run this script again."
+    echo "Keeping your dictionary ($dictionary). To get new data, run: krunner-translate update. To reset it, delete the file and run this script again."
 fi
 install -m 644 "$repo/install/krunner-translate.desktop" "$data/krunner/dbusplugins/krunner-translate.desktop"
 sed "s|@HOME@|$HOME|" "$repo/install/net.krunnertranslate.runner.service" > "$data/dbus-1/services/net.krunnertranslate.runner.service"
