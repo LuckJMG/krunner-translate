@@ -4,7 +4,7 @@
 # If the prebuilt program does not run on this system, it builds the program with cargo.
 # KRUNNER_TRANSLATE_BASE_URL replaces the download address (for tests, for example file:///path/to/release).
 set -eu
-BASE=${KRUNNER_TRANSLATE_BASE_URL:-https://github.com/LuckJMG/krunner-translate/releases/download/v0.3-beta}
+BASE=${KRUNNER_TRANSLATE_BASE_URL:-https://github.com/LuckJMG/krunner-translate/releases/download/v0.4-beta}
 repo=$(cd "$(dirname "$0")" && pwd)
 data=${XDG_DATA_HOME:-$HOME/.local/share}
 
