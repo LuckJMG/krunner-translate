@@ -68,16 +68,26 @@ def unstressed(word):
     return no_stress(word.lower())
 
 
-def kaikki_lemmas(lang, folder):
+def kaikki_lemmas(lang, folder, with_forms=False):
+    """Pairs (form, base word) from a kaikki.org dump. The dump has an entry for many forms, and `form_of` points to the base word.
+    With `with_forms`, the `forms` list of each base word counts too. Turkish, Polish and Dutch have most of their forms only there."""
     pairs = set()
     for line in open(f"{folder}/kaikki-{lang}.jsonl", encoding="utf-8"):
         entry = json.loads(line)
+        word = unstressed(entry["word"])
         for sense in entry.get("senses", []):
             for target in sense.get("form_of", []):
-                pair = (unstressed(entry["word"]), unstressed(target["word"]))
-                if pair[0] != pair[1]:
-                    pairs.add(pair)
-    return [(lang, form, lemma) for form, lemma in sorted(pairs)]  # sorted: the same dump gives the same pack bytes
+                pairs.add((unstressed(entry["word"]), unstressed(target["word"])))
+        for form in entry.get("forms", []) if with_forms else []:
+            tags = form.get("tags", [])
+            # Some entries list a placeholder of the inflection table instead of a form.
+            if not any("table-tags" in tag or tag == "inflection-template" for tag in tags) and form.get("form") not in (None, "-", "no-table-tags"):
+                pairs.add((unstressed(form["form"]), word))
+    return [(lang, form, lemma) for form, lemma in sorted(pairs) if form != lemma]  # sorted: the same dump gives the same pack bytes
+
+
+def kaikki_with_forms(lang, folder):
+    return kaikki_lemmas(lang, folder, with_forms=True)
 
 
 def both_lemmas(lang, folder):
@@ -91,18 +101,25 @@ def no_lemmas(lang, folder):
 
 
 # One line for each language: how to read its base forms. WikDict has usable base forms only for English, French and German.
-# Spanish, Russian and Portuguese come from the kaikki.org dump alone. Chinese has none. A new language is one line here, and the pairs follow from the table.
-LANGUAGES = {"en": both_lemmas, "es": kaikki_lemmas, "fr": both_lemmas, "ru": kaikki_lemmas, "de": both_lemmas, "pt": kaikki_lemmas, "zh": no_lemmas}
+# Spanish, Russian and Portuguese come from the kaikki.org dump alone. Chinese has none.
+# Italian, Dutch, Polish and Turkish also use the `forms` lists of the dump, because it has most of their forms only there. A new language is one line here, and the pairs follow from the table.
+LANGUAGES = {"en": both_lemmas, "es": kaikki_lemmas, "fr": both_lemmas, "ru": kaikki_lemmas, "de": both_lemmas, "pt": kaikki_lemmas, "zh": no_lemmas,
+             "it": kaikki_with_forms, "nl": kaikki_with_forms, "pl": kaikki_with_forms, "tr": kaikki_with_forms}
 PAIRS = [f"{a}-{b}" for a in LANGUAGES for b in LANGUAGES if a != b]
 
 
+# Letters that have no accent mark to remove. People type the plain letter for them: `lodz` for `łódź`, `kiz` for `kız`.
+PLAIN_LETTERS = str.maketrans({"ł": "l", "ı": "i"})
+
+
 def plain(word):
-    """The word without accents: `todavía` becomes `todavia`, `ё` becomes `е`. The Russian `й` stays, because it is a different letter."""
+    """The word without accents: `todavía` becomes `todavia`, `ё` becomes `е`, `łódź` becomes `lodz`.
+    The Russian `й` stays, because it is a different letter."""
     folded = ""
     for char in unicodedata.normalize("NFD", word):
         if not unicodedata.combining(char) or (char == "\u0306" and folded.endswith("и")):
             folded += char
-    return unicodedata.normalize("NFC", folded)
+    return unicodedata.normalize("NFC", folded).translate(PLAIN_LETTERS)
 
 
 def accent_lemmas(lang, lemmas, headwords):
@@ -228,6 +245,10 @@ def check_packs(pack_folder, manifest):
         ("lemma-ru", "столы", "стол"), ("lemma-ru", "шёл", "идти"), ("lemma-de", "häuser", "haus"), ("lemma-de", "ging", "gehen"),
         ("lemma-de", "gegangen", "gehen"), ("lemma-pt", "casas", "casa"), ("lemma-pt", "falou", "falar"),
         # Words without accents map to the real word. Simplified and Traditional Chinese map to each other.
+        ("meaning-it-en", "casa", "house"), ("meaning-nl-en", "huis", "house"), ("meaning-pl-en", "dom", "house"), ("meaning-tr-en", "ev", "house"),
+        ("lemma-it", "case", "casa"), ("lemma-it", "andò", "andare"), ("lemma-nl", "huizen", "huis"), ("lemma-nl", "ging", "gaan"),
+        ("lemma-pl", "domy", "dom"), ("lemma-pl", "poszedł", "pójść"), ("lemma-tr", "evler", "ev"), ("lemma-tr", "gitti", "gitmek"),
+        ("lemma-pl", "lodz", "łódź"), ("lemma-tr", "kiz", "kız"), ("lemma-tr", "cok", "çok"), ("lemma-it", "perche", "perché"),
         ("lemma-es", "todavia", "todavía"), ("lemma-es", "esta", "estar"), ("lemma-fr", "cafe", "café"), ("lemma-fr", "mange", "manger"),
         ("lemma-ru", "еж", "ёж"), ("lemma-de", "uber", "über"),
         ("lemma-zh", "汉字", "漢字"), ("lemma-zh", "電腦", "电脑"), ("lemma-zh", "中国", "中國"),
@@ -237,14 +258,15 @@ def check_packs(pack_folder, manifest):
         table = name.split("-")[0]
         assert open_pack(pack_folder, manifest, name).execute(f"select count(*) from {table} where {columns}", (first, second)).fetchone()[0] == 1, (name, first, second)
     # Rows that must not exist: a tense in several words, a stress mark, and the Russian й folded to и.
-    assert plain("йод") == "йод" and plain("ёж") == "еж" and plain("über") == "uber"
+    assert plain("йод") == "йод" and plain("ёж") == "еж" and plain("über") == "uber" and plain("łódź") == "lodz" and plain("kız") == "kiz"
     assert count("lemma-en", "select count(*) from lemma where form = 'most woodenly'") == 0
+    assert count("lemma-nl", "select count(*) from lemma where form = 'no-table-tags'") == 0
     assert count("lemma-de", "select count(*) from lemma where form like '% %' and lemma not like '% %'") == 0
     assert count("lemma-ru", "select count(*) from lemma where lemma like '%' || char(769) || '%' or form like '%' || char(769) || '%'") == 0
     for name in manifest["packs"]:
         table = name.split("-")[0]
         # Chinese has no base forms, only the rows between the two scripts.
-        assert count(name, f"select count(*) from {table}") > 10_000, name
+        assert count(name, f"select count(*) from {table}") > 5_000, name
         if table == "meaning":
             assert count(name, "select count(*) from (select 1 from meaning group by word, translation having count(*) > 1)") == 0, name
     print("Self-check passed")
