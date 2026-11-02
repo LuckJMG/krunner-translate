@@ -89,7 +89,7 @@ mod tests {
         let db = Connection::open_in_memory().unwrap();
         db.execute_batch(
             "create table meaning(direction text, word text, translation text, sense text, score real);
-             create table lemma(lang text, form text, lemma text);
+             create table lemma(lang text, form text, lemma text, primary key(lang, form, lemma)) without rowid;
              create table language(code text);
              insert into language values ('en'), ('es'), ('fr');
              insert into meaning values

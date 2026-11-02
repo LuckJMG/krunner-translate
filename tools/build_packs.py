@@ -32,6 +32,8 @@ import unicodedata
 FORMAT = 2  # An older program must refuse packs with a higher number. 2: bundles with byte ranges (1: one file for each pack).
 MEANING = "create table meaning(direction text, word text, translation text, sense text, score real)"
 LEMMA = "create table lemma(lang text, form text, lemma text)"
+# The dictionary file has no separate index for `lemma`: the table is its own index, and the file is 40% smaller. Packs have plain tables.
+DICTIONARY_LEMMA = "create table lemma(lang text, form text, lemma text, primary key(lang, form, lemma)) without rowid"
 
 
 def read_only(path):
@@ -269,6 +271,8 @@ def check_packs(pack_folder, manifest):
         assert count(name, f"select count(*) from {table}") > 5_000, name
         if table == "meaning":
             assert count(name, "select count(*) from (select 1 from meaning group by word, translation having count(*) > 1)") == 0, name
+        else:
+            assert count(name, "select count(*) from (select 1 from lemma group by form, lemma having count(*) > 1)") == 0, name
     print("Self-check passed")
 
 
@@ -282,7 +286,7 @@ def merge(pack_folder, output, langs):
         os.remove(output)
     db = sqlite3.connect(output)
     db.execute(MEANING)
-    db.execute(LEMMA)
+    db.execute(DICTIONARY_LEMMA)
     # Read by the runner to know the installed languages. A scan of `meaning` would take 10 ms.
     db.execute("create table language(code text)")
     db.executemany("insert into language values (?)", [(lang,) for lang in langs])
@@ -291,7 +295,6 @@ def merge(pack_folder, output, langs):
         rows = open_pack(pack_folder, manifest, name).execute(f"select * from {table}")
         db.executemany(f"insert into {table} values ({','.join('?' * len(rows.description))})", rows)
     db.execute("create index meaning_idx on meaning(direction, word)")
-    db.execute("create index lemma_idx on lemma(lang, form)")
     db.commit()
     count = lambda sql: db.execute(sql).fetchone()[0]
     assert count("select count(*) from language") == len(langs)
