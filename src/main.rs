@@ -62,6 +62,7 @@ fn build_rows(outcome: &Outcome) -> Vec<MatchRow> {
             })
             .collect(),
         Outcome::MissingLanguage(code) => vec![status_row(&format!("Language {code} is not installed"), "See the README to add languages")],
+        Outcome::MissingPair(from, to) => vec![status_row(&format!("No translation pair {from} → {to}"), "A language can have pairs with English only")],
         Outcome::NotFound => vec![status_row("No translation found", "")],
     }
 }
@@ -202,6 +203,7 @@ mod tests {
 
         assert_eq!(build_rows(&Outcome::NotFound)[0].text, "No translation found");
         assert_eq!(build_rows(&Outcome::MissingLanguage("fr".into()))[0].text, "Language fr is not installed");
+        assert_eq!(build_rows(&Outcome::MissingPair("uk".into(), "es".into()))[0].text, "No translation pair uk → es");
         assert_eq!(build_rows(&Outcome::NotFound)[0].id, "none:");
     }
 }

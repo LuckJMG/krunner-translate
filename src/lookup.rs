@@ -19,6 +19,8 @@ pub enum Outcome {
     Sections(Vec<Section>),
     /// A language of the query has no data in the file.
     MissingLanguage(String),
+    /// No pack gives the pair, for example Ukrainian to Spanish: a language can have pairs with English only.
+    MissingPair(String, String),
     NotFound,
 }
 
@@ -44,7 +46,27 @@ pub fn lookup(db: &Connection, query: &Query, settings: &Settings) -> rusqlite::
     }
     // The best score first, over all directions. The sort is stable, so ties keep the order above.
     sections.sort_by(|a, b| b.rows[0].score.total_cmp(&a.rows[0].score));
-    Ok(if sections.is_empty() { Outcome::NotFound } else { Outcome::Sections(sections) })
+    if !sections.is_empty() {
+        return Ok(Outcome::Sections(sections));
+    }
+    Ok(match missing_pair(db, &directions)? {
+        Some((from, to)) => Outcome::MissingPair(from, to),
+        None => Outcome::NotFound,
+    })
+}
+
+/// The first direction, if none of the directions has data at all. A word that is not in an existing pair is another case.
+/// A language paired with itself is not a missing pair.
+fn missing_pair(db: &Connection, directions: &[(String, String)]) -> rusqlite::Result<Option<(String, String)>> {
+    let mut statement = db.prepare("select 1 from meaning where direction = ?1 limit 1")?;
+    let mut first = None;
+    for (from, to) in directions.iter().filter(|(from, to)| from != to) {
+        if statement.exists([format!("{from}-{to}")])? {
+            return Ok(None);
+        }
+        first.get_or_insert((from.clone(), to.clone()));
+    }
+    Ok(first)
 }
 
 pub fn installed_languages(db: &Connection) -> rusqlite::Result<BTreeSet<String>> {
@@ -91,7 +113,7 @@ mod tests {
             "create table meaning(direction text, word text, translation text, sense text, score real);
              create table lemma(lang text, form text, lemma text, primary key(lang, form, lemma)) without rowid;
              create table language(code text);
-             insert into language values ('en'), ('es'), ('fr');
+             insert into language values ('en'), ('es'), ('fr'), ('uk');
              insert into meaning values
                ('es-en', 'house', 'house music', '', 2),
                ('en-es', 'house', 'casa', '', 256.1),
@@ -102,7 +124,8 @@ mod tests {
                ('en-es', 'pan', 'sartén', '', 90),
                ('es-en', 'pan', 'bread', '', 80),
                ('fr-en', 'maison', 'house', '', 90),
-               ('fr-es', 'maison', 'casa', '', 80);
+               ('fr-es', 'maison', 'casa', '', 80),
+               ('uk-en', 'привіт', 'hello', '', 50);
              insert into lemma values ('es', 'casas', 'casar'), ('es', 'casas', 'casa');",
         )
         .unwrap();
@@ -121,6 +144,7 @@ mod tests {
                 sections[0].rows.iter().map(|r| r.translation.clone()).collect(),
             ),
             Outcome::MissingLanguage(code) => (vec![format!("missing {code}")], vec![]),
+            Outcome::MissingPair(from, to) => (vec![format!("no pair {from}-{to}")], vec![]),
             Outcome::NotFound => (vec!["not found".to_string()], vec![]),
         }
     }
@@ -148,5 +172,10 @@ mod tests {
         assert_eq!(run("tr de: house").0, ["missing de"]);
         assert_eq!(run("tr en:en house").0, ["not found"]);
         assert_eq!(run("tr zzzxq").0, ["not found"]);
+        // Ukrainian has the pair with English only. A word that is missing in an existing pair is not a missing pair.
+        assert_eq!(run("tr uk: привіт").0, ["привіт (uk → en)"]);
+        assert_eq!(run("tr uk:es привіт").0, ["no pair uk-es"]);
+        assert_eq!(run("tr uk: zzzxq").0, ["not found"]);
+        assert_eq!(run_with("tr uk: привіт", &Settings { main: "es".into(), second: "en".into() }).0, ["no pair uk-es"]);
     }
 }

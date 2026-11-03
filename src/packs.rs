@@ -75,6 +75,12 @@ pub fn needed_all(codes: &[String], installed: &BTreeSet<String>) -> Vec<String>
 }
 
 impl Manifest {
+    /// The names without the pair packs that the release does not have. A language can have pairs with English only.
+    /// A missing base-form pack stays in the list, so `size` reports it.
+    pub fn offered(&self, names: Vec<String>) -> Vec<String> {
+        names.into_iter().filter(|name| !name.starts_with("meaning-") || self.packs.contains_key(name)).collect()
+    }
+
     pub fn fetch() -> Result<Manifest, String> {
         Manifest::parse(&get("packs.json", None)?)
     }
@@ -232,6 +238,15 @@ mod tests {
         assert_eq!(manifest.size(&["lemma-de".into()]).unwrap_err(), "The packs do not offer lemma-de.");
         assert!(Manifest::parse(json.replace("\"format\": 2", "\"format\": 1").as_bytes()).is_err());
         assert!(Manifest::parse(b"nonsense").is_err());
+        // Ukrainian has pairs with English only: the pair with Spanish is dropped, a missing base-form pack is not.
+        let only_english = r#"{"format": 2, "packs": {
+            "lemma-uk": {"file": "b", "offset": 0, "size": 1, "sha256": "x"},
+            "meaning-uk-en": {"file": "b", "offset": 1, "size": 1, "sha256": "x"},
+            "meaning-en-uk": {"file": "b", "offset": 2, "size": 1, "sha256": "x"}}}"#;
+        let manifest_uk = Manifest::parse(only_english.as_bytes()).unwrap();
+        let wanted = needed("uk", &languages(&["en", "es"]));
+        assert_eq!(manifest_uk.offered(wanted), ["lemma-uk", "meaning-uk-en", "meaning-en-uk"]);
+        assert_eq!(manifest_uk.offered(needed("fr", &languages(&["en"]))), ["lemma-fr"]);
         assert_eq!(
             needed("fr", &languages(&["en", "es"])),
             ["lemma-fr", "meaning-fr-en", "meaning-en-fr", "meaning-fr-es", "meaning-es-fr"]

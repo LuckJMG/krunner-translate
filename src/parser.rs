@@ -1,9 +1,9 @@
 // Turns a KRunner query `tr [from:][:to] text` into languages and text.
 
-// The 26 WikDict languages. A two-letter code counts as a language only if it is on this list.
-const KNOWN: [&str; 26] = [
-    "bg", "ca", "cs", "da", "de", "el", "en", "es", "fi", "fr", "ga", "id", "it", "ja", "ku", "la", "lt", "mg", "nl",
-    "no", "pl", "pt", "ru", "sv", "tr", "zh",
+// The 26 WikDict languages, and six languages that have pairs with English only. A two-letter code counts as a language only if it is on this list.
+const KNOWN: [&str; 32] = [
+    "ar", "bg", "ca", "cs", "da", "de", "el", "en", "es", "fi", "fr", "ga", "he", "hu", "id", "it", "ja", "ko", "ku", "la", "lt", "mg",
+    "nl", "no", "pl", "pt", "ru", "sk", "sv", "tr", "uk", "zh",
 ];
 
 #[derive(Debug, PartialEq)]

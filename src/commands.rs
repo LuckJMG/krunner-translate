@@ -112,7 +112,10 @@ fn add(code: Option<&str>) -> Result<(), String> {
     if !available.contains(code) {
         return Err(format!("Language {code} is not available. Run krunner-translate add to see the list."));
     }
-    let names = packs::needed(code, &installed);
+    let names = manifest.offered(packs::needed(code, &installed));
+    if !names.iter().any(|name| name.starts_with("meaning-")) {
+        return Err(format!("Language {code} has no pair with an installed language. Add en first."));
+    }
     let megabytes = manifest.size(&names)? as f64 / 1024.0 / 1024.0;
     confirm(&format!("Download {} packs ({megabytes:.1} MB) and add language {code}?", names.len()))?;
     let downloads = download_all(&manifest, names)?;
@@ -140,7 +143,7 @@ fn update(code: Option<&str>) -> Result<(), String> {
         Some(code) => return Err(format!("Language {code} is not installed.")),
         None => (installed.iter().cloned().collect(), "all languages".to_string()),
     };
-    let names = packs::needed_all(&codes, &installed);
+    let names = manifest.offered(packs::needed_all(&codes, &installed));
     let megabytes = manifest.size(&names)? as f64 / 1024.0 / 1024.0;
     confirm(&format!("Download {} packs ({megabytes:.1} MB) and replace the data of {what}?", names.len()))?;
     let downloads = download_all(&manifest, names)?;
