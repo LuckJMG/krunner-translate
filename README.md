@@ -8,7 +8,7 @@ A KRunner plugin that translates words and phrases. It works offline. Type `tr h
 
 ## What it does
 
-- Translates between English and Spanish at the start. You can add 24 more languages, for example French, Russian, German, Chinese, Japanese, and Finnish. See the section "Languages".
+- Translates between English and Spanish at the start. You can add 30 more languages, for example French, Russian, German, Chinese, Japanese, Finnish, Ukrainian, and Arabic. See the section "Languages".
 - Uses a local dictionary file. No query leaves your machine.
 - Shows base forms. For `casas`, it also shows the result for `casa`.
 - Groups the rows in sections, for example `house (en → es)`. The best match is first.
@@ -89,11 +89,13 @@ The dictionary has English and Spanish at the start. Other languages come in pac
 
 All of them except Chinese have base forms. Chinese has no inflection, so it has no base forms. Kurdish is Northern Kurdish in Latin script. Norwegian is Bokmål.
 
+Six more languages have translations to and from English only: Ukrainian, Arabic, Korean, Hungarian, Hebrew, and Slovak. They have no WikDict file. Their translations come from the English glosses of the Wiktionary data, so they have fewer rows than the other languages. English must be installed to add them. A query between one of them and another language that is not English shows "No translation pair". For example, `tr uk:es привіт` shows it. Use `tr uk: привіт` instead.
+
 To add a language, run `krunner-translate add fr`. The program downloads the packs, checks their SHA-256, and adds them in one step. If a pack is wrong, nothing changes. A new language comes with the pairs to every installed language.
 
 Words with Chinese characters find their other spelling. For example, `tr 汉字` finds `漢字`, because the Simplified and the Traditional spelling map to each other. The Chinese pairs have gaps. For example, the pair from Chinese to English has no entry for `中国`.
 
-Some pairs are small, because the WikDict file is small. For example, the pair from Indonesian to Irish has 13 rows. Finnish words with a possessive ending, for example `talossani`, have no base form in the packs. Japanese verbs also have their romaji spelling, for example `tabemasu` finds `食べる`.
+Some pairs are small, because the WikDict file is small. For example, the pair from Indonesian to Irish has 13 rows. Finnish words with a possessive ending, for example `talossani`, have no base form in the packs. Japanese verbs also have their romaji spelling, for example `tabemasu` finds `食べる`. Korean words with a particle, for example `집이`, do not find the word, because the data has no particle forms.
 
 If you type a code that is not installed, such as `tr de: haus`, KRunner shows "Language de is not installed". A query without language markers searches only between the main and the second language. To search from another language, type its code, for example `tr fr: maison`.
 
@@ -135,6 +137,7 @@ The dictionary file `dictionary.sqlite3` is made from these sources:
 - English, French, and German base forms: WikDict, and the English, French, and German data from kaikki.org for the verb forms.
 - Russian and Portuguese base forms: the Russian and Portuguese Wiktionary data from kaikki.org.
 - Base forms of all other languages: the Wiktionary data of these languages from kaikki.org. It includes the lists of forms of each base word. The build drops the romanizations and the headwords with accents from these lists.
+- Translations of Ukrainian, Arabic, Korean, Hungarian, Hebrew, and Slovak: the short English glosses of the kaikki.org data of these languages, and the translations in the English data. The build drops definitions of more than three words and notes such as "a male surname".
 - Simplified and Traditional Chinese: the tables of [OpenCC](https://github.com/BYVoid/OpenCC), under the Apache License 2.0. The build uses them. The program does not.
 
 `tools/build_packs.py` changes the data. It merges and filters the translations, keeps the best score for each word, and builds the tables of base forms. It writes one pack for each pair and each language, and puts the packs of one language in one bundle file. The `merge` command joins packs into the dictionary file.

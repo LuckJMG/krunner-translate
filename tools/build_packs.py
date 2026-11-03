@@ -4,13 +4,14 @@ A pack is one gzip file with one SQLite file inside.
   meaning-<from>-<to>   table `meaning`: one translation direction, from a WikDict pair file
   lemma-<lang>          table `lemma`: the base forms of one language
 The packs of one source language sit one after the other in one bundle file, bundle-<lang>.bin: its lemma pack and all
-meaning-<lang>-* packs. packs.json lists every pack (bundle file, offset, size, SHA-256) and the data format number.
+meaning-<lang>-* packs. A language in HUB has pairs with English only: its bundle holds lemma-<lang>, meaning-<lang>-en and meaning-en-<lang>. packs.json lists every pack (bundle file, offset, size, SHA-256) and the data format number.
 The program downloads only the byte range of each pack that it needs (HTTP Range request).
 A dictionary holds the tables `meaning`, `lemma` and `language`. `add` in the program does the same merge as `merge` here.
 
 Input folder, downloaded by hand (licenses: WikDict CC BY-SA, kaikki.org CC BY-SA 4.0 and GFDL):
   <from>-<to>.sqlite3 for each pair in PAIRS, <lang>.sqlite3 for en, fr, de          https://download.wikdict.com/dictionaries/sqlite/2/<name>.sqlite3
   kaikki-<lang>.jsonl for each language                                           https://kaikki.org/dictionary/<Language>/kaikki.org-dictionary-<Language>.jsonl
+                                                                                  (also for the HUB languages: their pairs come from the glosses of this dump, and from `translations` in kaikki-en.jsonl)
                                                                                   (<Language> is the English name, for example Spanish. `ku` is Northern Kurdish, `no` is Norwegian Bokm%C3%A5l. Chinese needs no dump.)
   opencc-<name>.txt for STCharacters, STPhrases, TSCharacters, TSPhrases          https://raw.githubusercontent.com/BYVoid/OpenCC/master/data/dictionary/<name>.txt
                                                                                   (OpenCC, Apache-2.0: Simplified and Traditional Chinese)
@@ -19,6 +20,7 @@ Run:
   python3 -I tools/build_packs.py check <pack folder>        (the self-check alone, on packs that exist)
   python3 -I tools/build_packs.py merge <pack folder> <output file> <language> <language>...
 """
+import collections
 import gzip
 import hashlib
 import io
@@ -88,8 +90,8 @@ def kaikki_lemmas(lang, folder, with_forms=False, skip_tags=NOISE_TAGS):
                 pairs.add((unstressed(entry["word"]), unstressed(target["word"])))
         for form in entry.get("forms", []) if with_forms else []:
             tags = form.get("tags", [])
-            # Some entries list a placeholder of the inflection table instead of a form.
-            if any("table-tags" in tag or tag == "inflection-template" or any(skip in tag for skip in skip_tags) for tag in tags):
+            # Some entries list a placeholder of the inflection table instead of a form. A form without tags is a table header or a note (`singular`, `caps ch`).
+            if not tags or any("table-tags" in tag or tag == "inflection-template" or any(skip in tag for skip in skip_tags) for tag in tags):
                 continue
             if form.get("form") not in (None, "-", "no-table-tags"):
                 pairs.add((unstressed(form["form"]), word))
@@ -110,8 +112,9 @@ def no_lemmas(lang, folder):
     return []
 
 
-def kaikki_finnish(lang, folder):
-    """A Finnish word has more than 2,000 forms, because of the possessive endings (`taloni`, `talossani`). Without them it has 100 times fewer."""
+def kaikki_without_possessives(lang, folder):
+    """A Finnish word has more than 2,000 forms, because of the possessive endings (`taloni`, `talossani`). Without them it has 100 times fewer.
+    Hungarian has the same endings."""
     return kaikki_lemmas(lang, folder, with_forms=True, skip_tags=NOISE_TAGS | {"possessive"})
 
 
@@ -122,9 +125,11 @@ def kaikki_finnish(lang, folder):
 LANGUAGES = {"en": both_lemmas, "es": kaikki_lemmas, "fr": both_lemmas, "ru": kaikki_lemmas, "de": both_lemmas, "pt": kaikki_lemmas, "zh": no_lemmas,
              "it": kaikki_with_forms, "nl": kaikki_with_forms, "pl": kaikki_with_forms, "tr": kaikki_with_forms,
              "bg": kaikki_with_forms, "ca": kaikki_with_forms, "cs": kaikki_with_forms, "da": kaikki_with_forms, "el": kaikki_with_forms,
-             "fi": kaikki_finnish, "ga": kaikki_with_forms, "id": kaikki_with_forms, "ja": kaikki_with_forms, "ku": kaikki_with_forms,
+             "fi": kaikki_without_possessives, "ga": kaikki_with_forms, "id": kaikki_with_forms, "ja": kaikki_with_forms, "ku": kaikki_with_forms,
              "la": kaikki_with_forms, "lt": kaikki_with_forms, "mg": kaikki_with_forms, "no": kaikki_with_forms, "sv": kaikki_with_forms}
 PAIRS = [f"{a}-{b}" for a in LANGUAGES for b in LANGUAGES if a != b]
+# Languages that have pairs with English only, because WikDict has no file for them. The pairs come from the English glosses of the kaikki.org dump.
+HUB = {"uk": kaikki_with_forms, "ar": kaikki_with_forms, "ko": kaikki_with_forms, "hu": kaikki_without_possessives, "he": kaikki_with_forms, "sk": kaikki_with_forms}
 
 
 # Letters that have no accent mark to remove. People type the plain letter for them: `lodz` for `łódź`, `kiz` for `kız`, `bjorn` for `bjørn`.
@@ -222,6 +227,88 @@ def open_pack(pack_folder, manifest, name):
     return db
 
 
+# Words of a gloss that tell about the entry and give no translation: `a male surname`, `plural of ...`.
+GLOSS_NOTES = re.compile("surname|given name|form of|alternative|misspelling|abbreviation|initialism|plural of|singular of")
+
+
+def gloss_words(gloss):
+    """The short English words of a gloss: `to function, operate (of a machine)` gives `to function` and `operate`.
+    A part of more than three words is a definition, and it gives nothing. A part that starts with `or` is the end of a list."""
+    words = []
+    for part in re.split("[;,:]", re.sub(r"\([^)]*\)", "", gloss)):
+        part = re.sub("^(a|an|the) ", "", part.strip(" .").lower())
+        if part and len(part.split()) <= 3 and not GLOSS_NOTES.search(part) and not part.startswith(("or ", "and ")):
+            words.append(part)
+    return words
+
+
+def english_translations(folder, codes):
+    """{code: {(English word, word)}} from the `translations` of the English dump. It has only a few thousand rows for each language."""
+    found = {code: set() for code in codes}
+    for line in open(f"{folder}/kaikki-en.jsonl", encoding="utf-8"):
+        entry = json.loads(line)
+        for translation in entry.get("translations", []):
+            code = translation.get("lang_code") or translation.get("code")
+            if code in found and translation.get("word"):
+                found[code].add((entry["word"].lower(), unstressed(translation["word"])))
+    return found
+
+
+def gloss_meanings(lang, folder, translated):
+    """The meaning rows of a language with pairs to English only: (to English rows, from English rows).
+    To English: the first gloss of each sense of the dump. The senses of a word count in the order of the dump, and the first one has the best score.
+    From English: the same rows the other way, and the translations of the English dump with a score of 50.
+    The English dump has no sense for them, so a row that both sources have wins."""
+    best, senses = {}, collections.Counter()
+    for line in open(f"{folder}/kaikki-{lang}.jsonl", encoding="utf-8"):
+        entry = json.loads(line)
+        word = unstressed(entry["word"])
+        for sense in entry.get("senses", []):
+            if sense.get("form_of") or not sense.get("glosses"):
+                continue
+            score = 100 / (1 + senses[word])
+            senses[word] += 1
+            for translation in gloss_words(sense["glosses"][0]):
+                best[(word, translation)] = max(best.get((word, translation), 0), score)
+    from_english = {(translation, word): score for (word, translation), score in best.items()}
+    for english, word in translated:
+        from_english[(english, word)] = max(from_english.get((english, word), 0), 50)
+    return ([(f"{lang}-en", word, translation, "", score) for (word, translation), score in sorted(best.items())],
+            [(f"en-{lang}", english, word, "", score) for (english, word), score in sorted(from_english.items())])
+
+
+def lemma_pack(pack_folder, lang, read, headwords, folder):
+    """The base forms of a language, and the rows without accents. `headwords` are its words from the meaning packs."""
+    lemmas = keep_phrase_rows(read(lang, folder))
+    extra = VARIANTS[lang](lang, headwords, folder) if lang in VARIANTS else set()
+    # Some entries have the rest of a template in the text: `-ο}`, `}}`.
+    rows = sorted(row for row in set(lemmas) | set(accent_lemmas(lang, lemmas, headwords)) | extra if not re.search("[{}]", row[1] + row[2]))
+    return make_pack(pack_folder, f"lemma-{lang}", LEMMA, rows)
+
+
+def write_bundle(pack_folder, lang, data):
+    """Writes the packs one after the other in bundle-<lang>.bin. Returns their entries for packs.json."""
+    bundle, offset, entries = f"bundle-{lang}.bin", 0, {}
+    with open(f"{pack_folder}/{bundle}", "wb") as out:
+        for name, pack in data.items():
+            out.write(pack)
+            entries[name] = {"file": bundle, "offset": offset, "size": len(pack), "sha256": hashlib.sha256(pack).hexdigest()}
+            offset += len(pack)
+    return entries
+
+
+def build_hub(folder, pack_folder):
+    """The bundles of the languages in HUB: lemma-<lang>, meaning-<lang>-en and meaning-en-<lang>. Returns their entries for packs.json."""
+    translated, packs = english_translations(folder, HUB), {}
+    for lang, read in HUB.items():
+        to_english, from_english = gloss_meanings(lang, folder, translated[lang])
+        data = {f"meaning-{lang}-en": make_pack(pack_folder, f"meaning-{lang}-en", MEANING, to_english),
+                f"meaning-en-{lang}": make_pack(pack_folder, f"meaning-en-{lang}", MEANING, from_english)}
+        data = {f"lemma-{lang}": lemma_pack(pack_folder, lang, read, {row[1] for row in to_english}, folder), **data}
+        packs.update(write_bundle(pack_folder, lang, data))
+    return packs
+
+
 def build_packs(folder, pack_folder):
     os.makedirs(pack_folder, exist_ok=True)
     packs = {}
@@ -232,21 +319,13 @@ def build_packs(folder, pack_folder):
             rows = meanings(read_only(f"{folder}/{pair}.sqlite3"), pair)
             headwords.update(row[1] for row in rows)
             data[f"meaning-{pair}"] = make_pack(pack_folder, f"meaning-{pair}", MEANING, rows)
-        lemmas = keep_phrase_rows(read(lang, folder))
-        extra = VARIANTS[lang](lang, headwords, folder) if lang in VARIANTS else set()
-        # Some entries have the rest of a template in the text: `-ο}`, `}}`.
-        lemma_rows = sorted(row for row in set(lemmas) | set(accent_lemmas(lang, lemmas, headwords)) | extra if not re.search("[{}]", row[1] + row[2]))
-        data = {f"lemma-{lang}": make_pack(pack_folder, f"lemma-{lang}", LEMMA, lemma_rows), **data}
-        bundle, offset = f"bundle-{lang}.bin", 0
-        with open(f"{pack_folder}/{bundle}", "wb") as out:
-            for name, pack in data.items():
-                out.write(pack)
-                packs[name] = {"file": bundle, "offset": offset, "size": len(pack), "sha256": hashlib.sha256(pack).hexdigest()}
-                offset += len(pack)
+        data = {f"lemma-{lang}": lemma_pack(pack_folder, lang, read, headwords, folder), **data}
+        packs.update(write_bundle(pack_folder, lang, data))
+    packs.update(build_hub(folder, pack_folder))
     manifest = {"format": FORMAT, "packs": packs}
     json.dump(manifest, open(f"{pack_folder}/packs.json", "w"), indent=2, sort_keys=True)
     check_packs(pack_folder, manifest)
-    for lang in LANGUAGES:
+    for lang in [*LANGUAGES, *HUB]:
         print(f"bundle-{lang}.bin: {os.path.getsize(f'{pack_folder}/bundle-{lang}.bin') / 1024 / 1024:.1f} MB")
 
 
@@ -283,6 +362,13 @@ def check_packs(pack_folder, manifest):
         ("meaning-lt-en", "namas", "house"), ("lemma-lt", "namai", "namas"), ("meaning-mg-en", "trano", "house"), ("meaning-no-en", "hus", "house"),
         ("lemma-no", "husene", "hus"), ("meaning-sv-en", "hus", "house"), ("lemma-sv", "husen", "hus"), ("lemma-sv", "ar", "år"),
         ("meaning-en-fi", "house", "talo"), ("meaning-en-ja", "house", "家"), ("meaning-en-el", "house", "σπίτι"),
+        # Languages with pairs to English only: the word, the English word, a form, and a word without accents.
+        ("meaning-uk-en", "дім", "house"), ("meaning-en-uk", "book", "книга"), ("lemma-uk", "пішоходах", "пішохід"),
+        ("meaning-ar-en", "بيت", "house"), ("meaning-en-ar", "book", "كتاب"), ("lemma-ar", "الغاشمين", "غاشم"),
+        ("meaning-ko-en", "집", "house"), ("meaning-en-ko", "book", "책"), ("lemma-ko", "설거지하였음", "설거지하다"),
+        ("meaning-hu-en", "ház", "house"), ("meaning-en-hu", "book", "könyv"), ("lemma-hu", "előzményt", "előzmény"), ("lemma-hu", "zsirszovetekert", "zsírszövet"),
+        ("meaning-he-en", "בית", "house"), ("meaning-en-he", "book", "ספר"), ("lemma-he", "חגים", "חג"),
+        ("meaning-sk-en", "dom", "house"), ("meaning-en-sk", "house", "dom"), ("lemma-sk", "dobrého", "dobrý"),
     ]
     for name, first, second in expected:
         columns = "word = ? and translation = ?" if name.startswith("meaning") else "form = ? and lemma = ?"
@@ -296,6 +382,8 @@ def check_packs(pack_folder, manifest):
     # The Japanese `か` and `が` are two syllables. Finnish forms with a possessive ending are not in the pack.
     assert count("lemma-ja", "select count(*) from lemma where (form = 'か' and lemma = 'が') or (form = 'が' and lemma = 'か')") == 0
     assert count("lemma-fi", "select count(*) from lemma where form = 'talossani'") == 0
+    # The Slovak forms lists have the headers of the table (`singular`) as forms without tags.
+    assert count("lemma-sk", "select count(*) from lemma where form in ('singular', 'plural', 'nominative', 'genitive')") == 0
     assert count("lemma-ru", "select count(*) from lemma where lemma like '%' || char(769) || '%' or form like '%' || char(769) || '%'") == 0
     for name in manifest["packs"]:
         table = name.split("-")[0]
@@ -312,7 +400,8 @@ def check_packs(pack_folder, manifest):
 def merge(pack_folder, output, langs):
     manifest = json.load(open(f"{pack_folder}/packs.json"))
     assert manifest["format"] == FORMAT, f"pack format {manifest['format']}, this script reads {FORMAT}"
-    names = [f"lemma-{lang}" for lang in langs] + [f"meaning-{a}-{b}" for a in langs for b in langs if a != b]
+    names = [f"lemma-{lang}" for lang in langs] + [f"meaning-{a}-{b}" for a in langs for b in langs
+                                                   if a != b and ((a in LANGUAGES and b in LANGUAGES) or "en" in (a, b))]
     missing = [name for name in names if name not in manifest["packs"]]
     assert not missing, f"no pack for: {missing}"
     if os.path.exists(output):
