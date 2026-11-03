@@ -8,7 +8,7 @@ A KRunner plugin that translates words and phrases. It works offline. Type `tr h
 
 ## What it does
 
-- Translates between English and Spanish at the start. You can add French, Russian, German, Portuguese, Chinese, Italian, Dutch, Polish, and Turkish. See the section "Languages".
+- Translates between English and Spanish at the start. You can add 24 more languages, for example French, Russian, German, Chinese, Japanese, and Finnish. See the section "Languages".
 - Uses a local dictionary file. No query leaves your machine.
 - Shows base forms. For `casas`, it also shows the result for `casa`.
 - Groups the rows in sections, for example `house (en → es)`. The best match is first.
@@ -19,7 +19,7 @@ A KRunner plugin that translates words and phrases. It works offline. Type `tr h
 - KDE Plasma 6. The plugin was tested on Plasma 6.7.5 only. Other versions can fail.
 - Linux on x86-64 for the prebuilt program. On other machines, the install script builds the program with `cargo`.
 - The tools `curl`, `sha256sum`, and `gzip`.
-- About 65 MB of disk space for the dictionary with English and Spanish. Each language that you add needs more. Turkish needs the most, because one Turkish word has thousands of forms. A dictionary with English, Spanish, Italian, Dutch, Polish, and Turkish takes about 500 MB.
+- About 65 MB of disk space for the dictionary with English and Spanish. Each language that you add needs more. Finnish needs the most, then Turkish and Polish, because one word has thousands of forms. A dictionary with English, Spanish, Italian, Dutch, Polish, and Turkish takes about 500 MB. A dictionary with all 26 languages takes about 2.8 GB.
 
 ## Install
 
@@ -82,11 +82,18 @@ If you set a language that is already the other one, the two languages swap. A c
 
 ## Languages
 
-The dictionary has English and Spanish at the start. Other languages come in packs. The packs of one language sit in one bundle file in the release `data-v2` of this repository. The program downloads only the parts that it needs. The languages are English, Spanish, French, Russian, German, Portuguese, Chinese, Italian, Dutch, Polish, and Turkish. All of them except Chinese have base forms for verbs. Chinese has no inflection, so it has no base forms.
+The dictionary has English and Spanish at the start. Other languages come in packs. The packs of one language sit in one bundle file in the release `data-v2` of this repository. The program downloads only the parts that it needs. The languages are:
+
+- English, Spanish, French, Russian, German, Portuguese, Chinese, Italian, Dutch, Polish, and Turkish
+- Bulgarian, Catalan, Czech, Danish, Greek, Finnish, Irish, Indonesian, Japanese, Kurdish, Latin, Lithuanian, Malagasy, Norwegian, and Swedish
+
+All of them except Chinese have base forms. Chinese has no inflection, so it has no base forms. Kurdish is Northern Kurdish in Latin script. Norwegian is Bokmål.
 
 To add a language, run `krunner-translate add fr`. The program downloads the packs, checks their SHA-256, and adds them in one step. If a pack is wrong, nothing changes. A new language comes with the pairs to every installed language.
 
 Words with Chinese characters find their other spelling. For example, `tr 汉字` finds `漢字`, because the Simplified and the Traditional spelling map to each other. The Chinese pairs have gaps. For example, the pair from Chinese to English has no entry for `中国`.
+
+Some pairs are small, because the WikDict file is small. For example, the pair from Indonesian to Irish has 13 rows. Finnish words with a possessive ending, for example `talossani`, have no base form in the packs. Japanese verbs also have their romaji spelling, for example `tabemasu` finds `食べる`.
 
 If you type a code that is not installed, such as `tr de: haus`, KRunner shows "Language de is not installed". A query without language markers searches only between the main and the second language. To search from another language, type its code, for example `tr fr: maison`.
 
@@ -123,11 +130,11 @@ The script builds the program in a Debian 11 container with `podman`, so the pro
 
 The dictionary file `dictionary.sqlite3` is made from these sources:
 
-- Translations: [WikDict](https://www.wikdict.com) (every pair of the eleven languages, in both directions). WikDict data comes from Wiktionary and is under Creative Commons BY-SA.
+- Translations: [WikDict](https://www.wikdict.com) (every pair of the 26 languages, in both directions). WikDict data comes from Wiktionary and is under Creative Commons BY-SA.
 - Spanish base forms: the Spanish Wiktionary data from [kaikki.org](https://kaikki.org). It comes from [Wiktionary](https://www.wiktionary.org) contributors and is under Creative Commons BY-SA.
 - English, French, and German base forms: WikDict, and the English, French, and German data from kaikki.org for the verb forms.
 - Russian and Portuguese base forms: the Russian and Portuguese Wiktionary data from kaikki.org.
-- Italian, Dutch, Polish, and Turkish base forms: the Wiktionary data of these languages from kaikki.org. It includes the lists of forms of each base word.
+- Base forms of all other languages: the Wiktionary data of these languages from kaikki.org. It includes the lists of forms of each base word. The build drops the romanizations and the headwords with accents from these lists.
 - Simplified and Traditional Chinese: the tables of [OpenCC](https://github.com/BYVoid/OpenCC), under the Apache License 2.0. The build uses them. The program does not.
 
 `tools/build_packs.py` changes the data. It merges and filters the translations, keeps the best score for each word, and builds the tables of base forms. It writes one pack for each pair and each language, and puts the packs of one language in one bundle file. The `merge` command joins packs into the dictionary file.
